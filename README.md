@@ -1,0 +1,31 @@
+# Baca Buku
+Pembaca EPUB local-first (PWA) dengan antrean terjemahan ke Bahasa Indonesia dan TTS.
+
+## Status (Fase 1)
+Selesai (belum diuji di perangkat nyata): impor EPUB dan FB2 (termasuk encoding windows-1251), pembaca per bab, tema/font/ukuran/jarak, posisi baca tersimpan, TTS Web Speech, antrean terjemahan dengan **MOCK provider** (hasil berlabel `[MOCK]`).
+Fokus: EPUB (FB2 sebagai tambahan). DJVU/OCR dibatalkan; LIT harus dikonversi ke EPUB. Belum ada: ekspor/impor cadangan, pemindai kunci API di CI. Semua fitur belum diuji di perangkat nyata.
+
+## Jalankan
+`npm install && npm run dev` · tes: `npm test` · build: `npm run build`
+Deploy: push ke `main`, aktifkan Settings › Pages › Source: GitHub Actions.
+
+## Keamanan
+Tidak ada API key di repo. Terjemahan nyata direncanakan hanya di APK (kunci di penyimpanan native), bukan di PWA.
+
+## APK Android (Capacitor 6)
+Folder `android/` dibuat otomatis oleh CI (`npx cap add android`), jadi tidak ada di repo. Workflow `Build APK debug` menghasilkan `app-debug.apk` sebagai artefak build (Actions › run › Artifacts).
+Lokal: `npx cap add android && npm run cap:sync && cd android && ./gradlew assembleDebug` (butuh JDK 17 + Android SDK).
+TTS di APK memakai plugin `@capacitor-community/text-to-speech` (Android TextToSpeech). Jeda di native = berhenti lalu mengulang paragraf berjalan. **Pembacaan saat layar mati belum diuji dan belum dijamin.**
+APK release (keystore) belum disiapkan; jangan pernah commit keystore.
+
+## Terjemahan nyata (hanya APK)
+Penyedia: Google Cloud Translation Basic v2 dan Azure AI Translator (v3.0). Yandex belum diimplementasikan (ketersediaan API belum diverifikasi). Kunci disimpan lewat secure storage (Android Keystore) dan tidak pernah di localStorage/IndexedDB/repo. Di PWA hanya MOCK. Request memakai `CapacitorHttp` (lewat native, menghindari masalah CORS). Batas karakter bisa diatur; pemakaian dicatat di perangkat.
+
+## Cari dan penanda
+Cari teks di buku (teks asli atau terjemahan, mengikuti mode baca; maks. 100 hasil). Penanda: tombol Tandai memberi tanda pada paragraf pertama yang terlihat; daftar di tombol Tanda. Bahasa sumber diasumsikan Inggris (en), tujuan Indonesia (id).
+
+## Cadangan dan keamanan
+Ekspor ringan (terjemahan, posisi, penanda, pengaturan) atau penuh (termasuk teks buku) ke berkas JSON; di APK lewat menu bagikan. Kunci API tidak diekspor. `npm run scan` (juga di CI) memindai repo dan `dist/` untuk pola kunci/keystore dan menggagalkan build jika ada.
+
+## Gambar, sampul, dan terjemahan seluruh buku
+Gambar EPUB (maks. 6 MB per gambar) dan sampul disimpan di IndexedDB dan tampil di pembaca. Gambar luar (http) diabaikan. Terjemahan seluruh buku: panel Terjemah, tombol "Hitung dan mulai" (menampilkan jumlah karakter dan meminta konfirmasi). Tombol Kembali Android menutup panel/pembaca lebih dulu sebelum keluar. Perpustakaan menampilkan progres bab, tombol Lanjutkan, dan filter judul/penulis.
