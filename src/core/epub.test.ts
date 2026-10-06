@@ -2,7 +2,7 @@
 import {describe,it,expect,vi} from 'vitest'
 import {webcrypto} from 'node:crypto'
 import {zipSync,strToU8} from 'fflate'
-import {parseEpub,resolve} from './epub'
+import {parseEpub,resolve,chapterTitle} from './epub'
 if(!globalThis.crypto?.subtle)vi.stubGlobal('crypto',webcrypto)
 const png=new Uint8Array([137,80,78,71])
 const files={
@@ -24,4 +24,10 @@ describe('parseEpub',()=>{
   expect(b.cover).toBe('OEBPS/images/cover.png')
  })
  it('menolak berkas rusak',async()=>{await expect(parseEpub(new Uint8Array([1,2,3]).buffer)).rejects.toThrow()})
+})
+describe('chapterTitle',()=>{
+ const h=(text:string)=>({id:'x',kind:'heading' as const,text,hash:''})
+ it('menggabungkan nomor bab dengan judulnya',()=>{expect(chapterTitle([h('– 7 –'),h('Confessions of a Wage Slave')])).toBe('– 7 – Confessions of a Wage Slave')})
+ it('judul biasa tidak digabung',()=>{expect(chapterTitle([h('FOREWORD'),h('Lain')])).toBe('FOREWORD')})
+ it('cadangan: awal paragraf jika tanpa judul',()=>{expect(chapterTitle([{id:'y',kind:'paragraph' as const,text:'Hak cipta buku ini.',hash:''}])).toBe('Hak cipta buku ini.')})
 })

@@ -10,6 +10,13 @@ export function resolve(from:string,rel:string){
  for(const p of (r.startsWith('/')?r.slice(1):from.slice(0,from.lastIndexOf('/')+1)+r).split('/')){if(p==='..')out.pop();else if(p&&p!=='.')out.push(p)}
  const s=out.join('/');try{return decodeURIComponent(s)}catch{return s}
 }
+export function chapterTitle(blocks:Block[]){
+ const hs=blocks.filter(b=>b.kind==='heading').slice(0,3)
+ const weak=(x:string)=>!/\p{L}{4,}/u.test(x)||/^(part|chapter|bab|section)\s+[\w.]+$/i.test(x.trim())
+ let t=hs[0]?.text??''
+ if(t&&weak(t)&&hs[1])t+=' '+hs[1].text
+ if(!t){const p=blocks.find(b=>b.kind!=='image'&&b.text);if(p)t=p.text.length>48?p.text.slice(0,45)+'…':p.text}
+ return t}
 const clean=(s:string|null|undefined)=>(s??'').replace(/\s+/g,' ').trim()
 export async function parseEpub(buf:ArrayBuffer){
  let z:Record<string,Uint8Array>
@@ -33,7 +40,7 @@ export async function parseEpub(buf:ArrayBuffer){
   const href=man.get(r.getAttribute('idref')??'');if(!href)continue
   const cpath=base+decodeURIComponent(href.split('#')[0]);const f=z[cpath];if(!f)continue
   const doc=new DOMParser().parseFromString(strFromU8(f),'text/html')
-  const ci=chapters.length;const blocks:Block[]=[];let title=''
+  const ci=chapters.length;const blocks:Block[]=[]
   for(const el of [...doc.body.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,img,image')]){
    const id=`${ci}-${blocks.length}`
    if(el.localName==='img'||el.localName==='image'){
@@ -42,10 +49,10 @@ export async function parseEpub(buf:ArrayBuffer){
     continue}
    if(el.tagName==='LI'&&el.querySelector('p'))continue
    const text=clean(el.textContent);if(!text)continue
-   const heading=/^H\d$/.test(el.tagName);if(heading&&!title)title=text
+   const heading=/^H\d$/.test(el.tagName)
    blocks.push({id,kind:heading?'heading':el.closest('blockquote')?'quote':'paragraph',text,hash:await sha(text)})
   }
-  if(blocks.length)chapters.push({id:String(ci),title:title||`Bagian ${ci+1}`,blocks})
+  if(blocks.length)chapters.push({id:String(ci),title:chapterTitle(blocks)||`Bagian ${ci+1}`,blocks})
  }
  if(!chapters.length)throw new Error('Tidak ada teks yang bisa dibaca di EPUB ini.')
  let ch=items.find(i=>/cover-image/.test(i.getAttribute('properties')??''))?.getAttribute('href')

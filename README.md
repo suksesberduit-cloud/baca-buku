@@ -32,3 +32,6 @@ Gambar EPUB (maks. 6 MB per gambar) dan sampul disimpan di IndexedDB dan tampil 
 
 ## ML Kit, terjemah otomatis, ketuk paragraf, dan ikon
 Penyedia "ML Kit (offline, gratis)" (hanya APK): model Inggris dan Indonesia diunduh sekali; kualitas untuk terjemahan sederhana (lihat dokumentasi Google ML Kit; atribusi ML Kit dicantumkan di panel). Terjemah otomatis: opsi di panel Terjemah, menerjemahkan bab yang dibuka. Ketuk paragraf (mode Teks asli) untuk menerjemahkan satu paragraf. Ikon dibuat oleh `scripts/make-icons.py` (Pillow); hasilnya di `public/` dan `assets/android-res/`, disalin ke proyek Android oleh workflow APK.
+
+## Mode baca halaman dan menu tersembunyi
+Teks memenuhi layar. Geser kanan ke kiri = halaman berikutnya, kiri ke kanan = sebelumnya (di ujung bab pindah bab). Menu (Kembali, Isi, Cari, Tanda, Tampilan, Terjemah, dan kontrol bawah) muncul dengan menyentuh sudut atas kiri dan kanan bersamaan memakai dua jari; tombol ✕ atau tombol Kembali Android menutupnya. Mode "Gulir" tersedia di Tampilan. Judul bab di Isi digabung dengan nomor bab, dan daftar isi buku lama diperbarui otomatis saat dibuka. Status bar Android disembunyikan saat membaca.
