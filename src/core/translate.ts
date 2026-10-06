@@ -1,4 +1,4 @@
-import type {Book,Chapter} from './model'
+import type {Block,Book,Chapter} from './model'
 import {trGet,trPut,loadChapter} from './db'
 export class Fatal extends Error{}
 export interface TranslationProvider{id:string;label:string;maxChars:number;translate(t:string[],s:AbortSignal):Promise<string[]>}
@@ -33,3 +33,7 @@ export async function bookTodo(b:Book,p:string){let chars=0,blocks=0
 export async function translateBook(b:Book,p:TranslationProvider,onProg:(ci:number,n:number,d:number,t:number)=>void,s:AbortSignal){
  for(let ci=0;ci<b.toc.length;ci++){const ch=await loadChapter(b.id,ci);if(!ch)continue
   await translateChapter(b.id,ch,p,(d,t)=>onProg(ci,b.toc.length,d,t),s)}}
+export async function translateBlock(b:string,k:Block,p:TranslationProvider,s:AbortSignal){
+ const out:string[]=[]
+ for(const piece of split(k.text,p.maxChars))out.push(...await retry(()=>p.translate([piece],s),s))
+ const t=out.join(' ');await trPut(trKey(b,k.id,k.hash,p.id),t);return t}

@@ -29,3 +29,6 @@ Ekspor ringan (terjemahan, posisi, penanda, pengaturan) atau penuh (termasuk tek
 
 ## Gambar, sampul, dan terjemahan seluruh buku
 Gambar EPUB (maks. 6 MB per gambar) dan sampul disimpan di IndexedDB dan tampil di pembaca. Gambar luar (http) diabaikan. Terjemahan seluruh buku: panel Terjemah, tombol "Hitung dan mulai" (menampilkan jumlah karakter dan meminta konfirmasi). Tombol Kembali Android menutup panel/pembaca lebih dulu sebelum keluar. Perpustakaan menampilkan progres bab, tombol Lanjutkan, dan filter judul/penulis.
+
+## ML Kit, terjemah otomatis, ketuk paragraf, dan ikon
+Penyedia "ML Kit (offline, gratis)" (hanya APK): model Inggris dan Indonesia diunduh sekali; kualitas untuk terjemahan sederhana (lihat dokumentasi Google ML Kit; atribusi ML Kit dicantumkan di panel). Terjemah otomatis: opsi di panel Terjemah, menerjemahkan bab yang dibuka. Ketuk paragraf (mode Teks asli) untuk menerjemahkan satu paragraf. Ikon dibuat oleh `scripts/make-icons.py` (Pillow); hasilnya di `public/` dan `assets/android-res/`, disalin ke proyek Android oleh workflow APK.

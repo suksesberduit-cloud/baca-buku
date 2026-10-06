@@ -4,7 +4,8 @@ import {kvGet,kvSet} from '../core/db'
 import {mock,Fatal} from '../core/translate'
 import type {TranslationProvider} from '../core/translate'
 import {google,azure} from './remote'
-export interface Cfg{id:'mock'|'google'|'azure';region:string;limit:number}
+import {mlkit} from './mlkit'
+export interface Cfg{id:'mock'|'mlkit'|'google'|'azure';region:string;limit:number}
 // Kunci API HANYA disimpan di APK (Android Keystore via secure storage). Di web/PWA tidak pernah disimpan.
 export const nativeOnly=Capacitor.isNativePlatform()
 export const getKey=async(id:string)=>nativeOnly?String((await SecureStorage.get('key:'+id))??''):''
@@ -18,6 +19,7 @@ function metered(p:TranslationProvider,limit:number):TranslationProvider{
 }
 export async function buildProvider(c:Cfg):Promise<TranslationProvider>{
  if(!nativeOnly||c.id==='mock')return mock
+ if(c.id==='mlkit')return mlkit
  const key=await getKey(c.id)
  return metered(c.id==='google'?google(key):azure(key,c.region.trim()),c.limit)
 }

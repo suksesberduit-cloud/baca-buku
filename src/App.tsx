@@ -1,10 +1,10 @@
 import {useEffect,useRef,useState} from 'react'
-import type {Book,Chapter} from './core/model'
+import type {Block,Book,Chapter} from './core/model'
 import {sha} from './core/epub'
 import {importFile} from './core/import'
 import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore} from './core/db'
 import {saveText} from './core/files'
-import {mock,translateChapter,loadTr,estimate,bookTodo,translateBook} from './core/translate'
+import {mock,translateChapter,loadTr,estimate,bookTodo,translateBook,translateBlock} from './core/translate'
 import type {TranslationProvider} from './core/translate'
 import ApiPanel from './ApiPanel'
 import Img from './Img'
@@ -18,8 +18,8 @@ import {buildProvider} from './providers/config'
 import type {Cfg} from './providers/config'
 import {speak,stop,pause,resume,hasVoice} from './core/tts'
 type Mode='asli'|'terjemah'|'dua'
-interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number}
-const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40}
+interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean}
+const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false}
 const FONTS:Record<string,string>={serif:'Georgia,"Noto Serif",serif',sans:'system-ui,Roboto,sans-serif',mono:'ui-monospace,Menlo,monospace'}
 const THEMES:[string,string][]=[['putih','Putih'],['sepia','Sepia'],['abu','Abu-abu'],['gelap','Gelap'],['hitam','Hitam OLED']]
 const errMsg=(e:unknown)=>e instanceof DOMException&&e.name==='QuotaExceededError'?'Penyimpanan perangkat penuh. Hapus buku atau data lain, lalu coba lagi.':e instanceof Error?e.message:String(e)
@@ -32,13 +32,14 @@ export default function App(){
  const[cfg,setCfg]=useState<Cfg>({id:'mock',region:'',limit:0});const[prov,setProv]=useState<TranslationProvider>(mock)
  const[bms,setBms]=useState<Bm[]>([]);const[q,setQ]=useState('');const[hits,setHits]=useState<Hit[]|null>(null);const[searching,setSearching]=useState(false);const[hit,setHit]=useState('')
  const[stor,setStor]=useState('');const[bprog,setBprog]=useState<[number,number,number,number]|null>(null);const[pg,setPg]=useState<Record<string,number>>({});const[filter,setFilter]=useState('');const[last,setLast]=useState('')
- const backRef=useRef<()=>boolean>(()=>false)
+ const backRef=useRef<()=>boolean>(()=>false);const autoRef=useRef(false)
+ const[note,setNote]=useState('');const[rev,setRev]=useState<Record<string,boolean>>({});const[busyB,setBusyB]=useState('')
  const pendBlock=useRef('')
  const ac=useRef<AbortController|null>(null),main=useRef<HTMLDivElement>(null),pendY=useRef(0),ready=useRef(false),tm=useRef(0)
  useEffect(()=>{void navigator.storage?.persist?.();listBooks().then(setBooks);kvGet<S>('settings').then(v=>{if(v)setS({...DEF,...v});ready.current=true});kvGet<Cfg>('cfg').then(c=>{if(c){setCfg(c);void buildProvider(c).then(setProv)}})},[])
  useEffect(()=>{document.documentElement.dataset.theme=s.theme;if(ready.current)void kvSet('settings',s)},[s])
  useEffect(()=>{if(!cur)return;let dead=false
-  loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id))
+  loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id));if(autoRef.current&&!bprog)void doTr(c,true)
    requestAnimationFrame(()=>{if(pendBlock.current){document.getElementById('b'+pendBlock.current)?.scrollIntoView({block:'center'});pendBlock.current=''}else if(main.current)main.current.scrollTop=pendY.current;pendY.current=0})})
   return()=>{dead=true}},[cur,ci,prov])
  useEffect(()=>{void navigator.storage?.estimate?.().then(e=>setStor(`Penyimpanan terpakai: ${((e.usage??0)/1048576).toFixed(1)} MB dari kuota sekitar ${((e.quota??0)/1073741824).toFixed(1)} GB.`))},[books])
@@ -59,11 +60,11 @@ export default function App(){
   }catch(e){alert(errMsg(e))}finally{setBusy(false)}}
  async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');const p=await kvGet<{ci:number;y:number}>('pos:'+b.id);pendY.current=p?.y??0;setCh(null);setCi(p?.ci??0);setCur(b);setMode('asli')}
  function close(){stop();setPlaying(-1);ac.current?.abort();setCur(null);setCh(null);setPanel('')}
- function go(n:number){if(!cur||n<0||n>=cur.toc.length)return;stop();setPlaying(-1);pendY.current=0;setCi(n);setPanel('');void kvSet('pos:'+cur.id,{ci:n,y:0})}
+ function go(n:number){if(!cur||n<0||n>=cur.toc.length)return;stop();if(!bprog)ac.current?.abort();setNote('');setPlaying(-1);pendY.current=0;setCi(n);setPanel('');void kvSet('pos:'+cur.id,{ci:n,y:0})}
  function onScroll(){if(!cur)return;clearTimeout(tm.current);const y=main.current?.scrollTop??0;tm.current=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,y}),400)}
- async function doTr(){if(!cur||!ch)return;const a=new AbortController();ac.current=a;setProg([0,ch.blocks.filter(k=>k.kind!=='image').length])
-  try{await translateChapter(cur.id,ch,prov,(d,t)=>setProg([d,t]),a.signal)}catch(e){if(!a.signal.aborted)alert(errMsg(e))}
-  setTr(await loadTr(cur.id,ch,prov.id));setProg(null);setMode(m=>m==='asli'?'terjemah':m)}
+ async function doTr(c:Chapter|null=ch,auto=false){if(!cur||!c)return;const a=new AbortController();ac.current=a;setProg([0,c.blocks.filter(k=>k.kind!=='image').length])
+  try{await translateChapter(cur.id,c,prov,(d,t)=>setProg([d,t]),a.signal)}catch(e){if(!a.signal.aborted){if(auto)setNote(errMsg(e));else alert(errMsg(e))}}
+  const r=await loadTr(cur.id,c,prov.id);setTr(o=>({...o,...r}));setProg(null);if(!auto)setMode(m=>m==='asli'?'terjemah':m)}
  async function play(){if(!ch)return;const useTr=mode!=='asli'
   const idx=ch.blocks.map((_,i)=>i).filter(i=>ch.blocks[i].kind!=='image'&&(!useTr||tr[ch.blocks[i].id]))
   const texts=idx.map(i=>useTr?tr[ch.blocks[i].id]:ch.blocks[i].text)
@@ -73,12 +74,19 @@ export default function App(){
   speak(texts,useTr?'id-ID':'en-US',rate,i=>{setPlaying(idx[i]);document.getElementById('b'+ch.blocks[idx[i]].id)?.scrollIntoView({block:'center',behavior:'smooth'})},()=>setPlaying(-1))}
  function jump(n:number,id:string){stop();setPlaying(-1);setHit(id);setPanel('')
   if(n===ci)document.getElementById('b'+id)?.scrollIntoView({block:'center'})
-  else if(cur){pendBlock.current=id;pendY.current=0;setCi(n);void kvSet('pos:'+cur.id,{ci:n,y:0})}}
+  else if(cur){if(!bprog)ac.current?.abort();pendBlock.current=id;pendY.current=0;setCi(n);void kvSet('pos:'+cur.id,{ci:n,y:0})}}
  async function doSearch(){if(!cur)return;setSearching(true);try{setHits(await searchBook(cur,q,mode==='asli'?null:prov.id))}finally{setSearching(false)}}
  async function mark(){if(!cur||!ch)return;const top=main.current?.getBoundingClientRect().top??0
   const k=ch.blocks.find(b=>{const e=document.getElementById('b'+b.id);return !!e&&e.getBoundingClientRect().bottom>top+8});if(!k)return
   setBms(await addBm(cur.id,{id:k.id,ci,snip:k.text.slice(0,90),at:Date.now()}))}
- const upd=(k:keyof S,v:string|number)=>setS(o=>({...o,[k]:v}))
+ async function tapBlock(k:Block){
+  if(mode!=='asli'||k.kind==='image'||!cur||window.getSelection()?.toString())return
+  if(tr[k.id]){setRev(r=>({...r,[k.id]:!r[k.id]}));return}
+  if(busyB)return;setBusyB(k.id)
+  try{const t=await translateBlock(cur.id,k,prov,new AbortController().signal);setTr(o=>({...o,[k.id]:t}));setRev(r=>({...r,[k.id]:true}))}
+  catch(e){alert(errMsg(e))}finally{setBusyB('')}}
+ const upd=(k:keyof S,v:string|number|boolean)=>setS(o=>({...o,[k]:v}))
+ autoRef.current=s.auto
  backRef.current=()=>{if(panel){setPanel('');return true}if(cur){close();return true}return false}
  if(!cur)return(<div className="lib"><h1>Baca Buku</h1>
   <label className="btn big">{busy?'Mengimpor…':'Impor buku (EPUB, FB2)'}<input type="file" accept=".epub,.fb2,application/epub+zip,application/x-fictionbook+xml" hidden onChange={e=>{void onFile(e.target.files?.[0]);e.target.value=''}}/></label>
@@ -111,14 +119,16 @@ export default function App(){
   {panel==='tanda'&&<div className="panel">{bms.length===0&&<small className="muted">Belum ada penanda. Gulir ke bagian yang ingin ditandai, lalu tekan Tandai di bawah.</small>}
    {bms.map(m=><div className="book" key={m.id}><button className="row grow" onClick={()=>jump(m.ci,m.id)}><small className="muted">{cur.toc[m.ci]}</small><br/>{m.snip}</button><button className="btn sm" onClick={()=>void delBm(cur.id,m.id).then(setBms)}>Hapus</button></div>)}</div>}
   {panel==='api'&&<div className="panel"><ApiPanel cfg={cfg} onSave={c=>{setCfg(c);void kvSet('cfg',c);void buildProvider(c).then(setProv);setPanel('')}}/>
+   <label><span>Terjemahkan otomatis bab yang dibuka</span><input type="checkbox" checked={s.auto} onChange={e=>{const on=e.target.checked;if(on&&prov.id!=='mock'&&prov.id!=='mlkit'&&!confirm('Terjemah otomatis memakai kuota/biaya penyedia setiap kali bab dibuka. Aktifkan?'))return;upd('auto',on);if(on)setMode(m=>m==='asli'?'dua':m)}}/></label>
    <div className="bk"><b>Terjemahkan seluruh buku</b><button className="btn sm" onClick={()=>void doBook()}>{bprog?`Batal (bab ${bprog[0]+1}/${bprog[1]}, paragraf ${bprog[2]}/${bprog[3]})`:'Hitung dan mulai'}</button><small className="muted">Bisa dihentikan lalu dilanjutkan; paragraf yang sudah diterjemahkan tidak diulang.</small></div></div>}
   <div className="main" ref={main} onScroll={onScroll}><article style={{fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],maxWidth:s.width+'ch','--gap':s.gap+'em'} as React.CSSProperties}>
-   {ch?<><small className="muted">Bab {ci+1} dari {total}</small>
+   {ch?<><small className="muted">Bab {ci+1} dari {total}{mode==='asli'?' · ketuk paragraf untuk terjemahan':''}</small>{note&&<small className="muted"> · {note}</small>}
     {ch.blocks.map((k,i)=>{const t=tr[k.id];const Tag=k.kind==='heading'?'h2':k.kind==='quote'?'blockquote':'p'
      if(k.kind==='image')return<div id={'b'+k.id} key={k.id} className="img"><Img book={cur.id} path={k.src??''} alt={k.text}/></div>
-     return<div id={'b'+k.id} key={k.id} className={(playing===i||hit===k.id?'hl':'')+(bms.some(m=>m.id===k.id)?' bm':'')}>
+     return<div id={'b'+k.id} key={k.id} onClick={()=>void tapBlock(k)} className={(playing===i||hit===k.id?'hl':'')+(bms.some(m=>m.id===k.id)?' bm':'')}>
       {(mode!=='terjemah'||!t)&&<Tag className={mode==='terjemah'?'blm':''}>{k.text}</Tag>}
-      {mode!=='asli'&&t&&<Tag className={mode==='dua'?'tr':''}>{t}</Tag>}</div>})}
+      {mode!=='asli'&&t&&<Tag className={mode==='dua'?'tr':''}>{t}</Tag>}
+      {mode==='asli'&&rev[k.id]&&t&&<Tag className="tr">{t}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>})}
     <div className="nav"><button className="btn" disabled={ci===0} onClick={()=>go(ci-1)}>Bab sebelumnya</button><button className="btn" disabled={ci>=total-1} onClick={()=>go(ci+1)}>Bab berikutnya</button></div></>:<p className="muted">Memuat bab…</p>}</article></div>
   <footer>
    <select value={mode} onChange={e=>setMode(e.target.value as Mode)}><option value="asli">Teks asli</option><option value="terjemah">Terjemahan</option><option value="dua">Asli + terjemahan</option></select>
