@@ -11,12 +11,19 @@ jobs:
         with: {distribution: temurin, java-version: 17}
       - run: npm install
       - run: npm test
+      - name: Stempel versi
+        run: echo "BUILD_ID=${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
       - run: npm run build
+        env: {BUILD_TARGET: apk}
       - run: node scripts/scan-secrets.mjs .
       - run: npx cap add android
       - run: cp -r assets/android-res/. android/app/src/main/res/
       - run: sed -i 's#</manifest>#<queries><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries></manifest>#' android/app/src/main/AndroidManifest.xml
       - run: npx cap sync android
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
       - run: ./gradlew assembleDebug
         working-directory: android
       - uses: actions/upload-artifact@v4

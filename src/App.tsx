@@ -140,7 +140,8 @@ useEffect(()=>{const el=wrap.current;if(!el||!cur||s.view!=='page')return
    <div className="chips"><button className="btn sm" onClick={()=>void doExport(false)}>Ekspor ringan</button><button className="btn sm" onClick={()=>void doExport(true)}>Ekspor penuh</button>
    <label className="btn sm">Impor cadangan<input type="file" accept=".json,application/json" hidden onChange={e=>{void doImport(e.target.files?.[0]);e.target.value=''}}/></label></div>
    <small className="muted">Ringan: terjemahan, posisi baca, penanda, pengaturan. Setelah dipulihkan, impor ulang berkas EPUB yang sama agar buku muncul. Penuh: termasuk teks buku. Kunci API tidak pernah ikut diekspor. {stor}</small></div>
-  <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p></div>)
+  <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p>
+  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, daftar isi lengkap</p></div>)
  const total=cur.toc.length
 const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap+'em'} as React.CSSProperties
  const blocksEl=ch?ch.blocks.map((k,i)=>{const t=tr[k.id];const Tag=k.kind==='heading'?'h2':k.kind==='quote'?'blockquote':'p'
