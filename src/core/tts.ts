@@ -22,13 +22,18 @@ function webSpeak(id:number){
  speechSynthesis.speak(u)
 }
 async function nativeLoop(id:number){
+ // Antrekan beberapa paragraf sekaligus ke mesin TTS supaya terus berbicara walau JavaScript ditahan saat layar mati.
+ const W=20,pending=new Map<number,Promise<unknown>>();let first=true
+ const enqueue=(i:number)=>{if(i>=st.texts.length||pending.has(i))return
+  const ps=split(st.texts[i],3500).map(piece=>{const qs=first?0:1;first=false
+   return TextToSpeech.speak({text:piece,lang:st.lang||'en-US',rate:st.rate,category:'playback',queueStrategy:qs}) as Promise<unknown>})
+  const p=Promise.all(ps);p.catch(()=>undefined);pending.set(i,p)}
+ for(let k=st.i;k<Math.min(st.texts.length,st.i+W);k++)enqueue(k)
  while(id===run&&st.i<st.texts.length){
   st.onIdx(st.i)
-  try{for(const piece of split(st.texts[st.i],3500)){if(id!==run)return
-   await TextToSpeech.speak({text:piece,lang:st.lang||'en-US',rate:st.rate,category:'playback',queueStrategy:0})}}
-  catch{if(id===run)st.onEnd();return}
+  try{await pending.get(st.i)}catch{if(id===run)st.onEnd();return}
   if(id!==run)return
-  st.i++
+  pending.delete(st.i);st.i++;enqueue(st.i+W-1)
  }
  if(id===run)st.onEnd()
 }

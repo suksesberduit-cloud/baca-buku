@@ -35,3 +35,6 @@ Penyedia "ML Kit (offline, gratis)" (hanya APK): model Inggris dan Indonesia diu
 
 ## Mode baca halaman dan menu tersembunyi
 Teks memenuhi layar. Geser kanan ke kiri = halaman berikutnya, kiri ke kanan = sebelumnya (di ujung bab pindah bab). Menu (Kembali, Isi, Cari, Tanda, Tampilan, Terjemah, dan kontrol bawah) muncul dengan menyentuh sudut atas kiri dan kanan bersamaan memakai dua jari; tombol ✕ atau tombol Kembali Android menutupnya. Mode "Gulir" tersedia di Tampilan. Judul bab di Isi digabung dengan nomor bab, dan daftar isi buku lama diperbarui otomatis saat dibuka. Status bar Android disembunyikan saat membaca.
+
+## Tes koneksi, tombol putar kecil, TTS latar belakang
+Panel Terjemah punya "Tes koneksi" (menerjemahkan satu kalimat contoh dan menampilkan hasil atau pesan galat). Tombol putar kecil di pojok kanan bawah tetap tampil saat menu tersembunyi (bisa dimatikan di Tampilan). TTS native mengantrekan hingga 20 paragraf sekaligus ke mesin Android agar terus berbicara walau JavaScript ditahan saat layar mati. Belum ada layanan foreground; jika masih berhenti di latar belakang, langkah berikutnya adalah plugin foreground service. Di HP Xiaomi/MIUI atur Hemat baterai aplikasi ke "Tanpa batasan".

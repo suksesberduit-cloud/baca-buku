@@ -19,8 +19,8 @@ import {buildProvider} from './providers/config'
 import type {Cfg} from './providers/config'
 import {speak,stop,pause,resume,hasVoice} from './core/tts'
 type Mode='asli'|'terjemah'|'dua'
-interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll'}
-const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page'}
+interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean}
+const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true}
 const PX=20,PY=28
 const FONTS:Record<string,string>={serif:'Georgia,"Noto Serif",serif',sans:'system-ui,Roboto,sans-serif',mono:'ui-monospace,Menlo,monospace'}
 const THEMES:[string,string][]=[['putih','Putih'],['sepia','Sepia'],['abu','Abu-abu'],['gelap','Gelap'],['hitam','Hitam OLED']]
@@ -163,7 +163,8 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
   {panel==='toc'&&<div className="panel">{cur.toc.map((t,i)=><button key={i} className={'row'+(i===ci?' on':'')} onClick={()=>go(i)}><span className="num">{i+1}.</span> {t}</button>)}</div>}
   {panel==='tampil'&&<div className="panel">
    <div className="chips">{THEMES.map(([k,l])=><button key={k} className={'btn sm'+(s.theme===k?' on':'')} onClick={()=>upd('theme',k)}>{l}</button>)}</div>
-   <label>Mode baca <select value={s.view} onChange={e=>upd('view',e.target.value)}><option value="page">Halaman (geser)</option><option value="scroll">Gulir</option></select></label>
+   <label><span>Tombol putar kecil di layar</span><input type="checkbox" checked={s.mini} onChange={e=>upd('mini',e.target.checked)}/></label>
+    <label>Mode baca <select value={s.view} onChange={e=>upd('view',e.target.value)}><option value="page">Halaman (geser)</option><option value="scroll">Gulir</option></select></label>
    <label>Huruf <select value={s.font} onChange={e=>upd('font',e.target.value)}><option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option></select></label>
    <label>Ukuran {s.size}<input type="range" min="14" max="30" value={s.size} onChange={e=>upd('size',+e.target.value)}/></label>
    <label>Tinggi baris {s.lh}<input type="range" min="1.2" max="2.4" step="0.1" value={s.lh} onChange={e=>upd('lh',+e.target.value)}/></label>
@@ -188,5 +189,6 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
    <button className="btn sm" onClick={()=>void mark()}>Tandai</button>
    <label className="rate">Kecepatan {rate}<input type="range" min="0.6" max="1.6" step="0.1" value={rate} onChange={e=>setRate(+e.target.value)}/></label>
   </footer>}
+  {s.mini&&!ui&&<div className="mini">{playing<0?<button aria-label="Bacakan" onClick={play}>▶</button>:<><button aria-label={paused?'Lanjut':'Jeda'} onClick={()=>{if(paused){resume()}else{pause()};setPaused(!paused)}}>{paused?'▶':'❚❚'}</button><button aria-label="Berhenti" onClick={()=>{stop();setPlaying(-1)}}>■</button></>}</div>}
   {hint&&!ui&&<div className="hint">Sentuh sudut atas kiri dan kanan layar bersamaan dengan dua jari untuk membuka menu</div>}</div>)
 }
