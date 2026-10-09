@@ -9,7 +9,8 @@
   "preview": "vite preview",
   "test": "vitest run",
   "cap:sync": "npm run build && cap sync android",
-  "scan": "node scripts/scan-secrets.mjs ."
+  "scan": "node scripts/scan-secrets.mjs .",
+  "prebuild": "node scripts/copy-ocr-assets.mjs"
  },
  "dependencies": {
   "fflate": "^0.8.2",
@@ -26,7 +27,8 @@
   "@capacitor-mlkit/translation": "^6.0.0",
   "@capacitor/status-bar": "^6.0.0",
   "pdfjs-dist": "3.11.174",
-  "@lingo-reader/mobi-parser": "0.4.1"
+  "@lingo-reader/mobi-parser": "0.4.1",
+  "tesseract.js": "5.1.1"
  },
  "devDependencies": {
   "@types/react": "^18.3.3",
@@ -39,5 +41,9 @@
   "vitest": "^2.0.5",
   "@capacitor/cli": "^6.0.0",
   "fake-indexeddb": "^6.0.0"
+ },
+ "optionalDependencies": {
+  "@tesseract.js-data/eng": "1.0.0",
+  "@tesseract.js-data/ind": "1.0.0"
  }
 }

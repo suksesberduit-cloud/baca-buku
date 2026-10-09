@@ -11,7 +11,7 @@ export function find(t:string,q:string){
 export async function searchBook(b:Book,q:string,provId:string|null,max=100){
  const out:Hit[]=[];if(q.trim().length<2)return out
  for(let ci=0;ci<b.toc.length&&out.length<max;ci++){
-  const ch=await loadChapter(b.id,ci);if(!ch)continue
+  const ch=await loadChapter(b.id,ci);if(!ch||ch.ocr)continue
   const tr=provId?await loadTr(b.id,ch,provId):null
   for(const k of ch.blocks){if(k.kind==='image')continue;const s=find(tr?(tr[k.id]??''):k.text,q.trim());if(s){out.push({ci,id:k.id,snip:s});if(out.length>=max)break}}
  }

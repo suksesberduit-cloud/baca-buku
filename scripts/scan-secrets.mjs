@@ -8,7 +8,7 @@ export const RULES=[
  ['Token (sk-, ghp_)',/\b(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36})\b/],
  ['Kata sandi keystore',/(storePassword|keyPassword)\s*[=:]\s*\S+/]]
 export const scan=(text)=>RULES.filter(([,re])=>re.test(text)).map(([n])=>n)
-function* walk(d){for(const n of readdirSync(d)){if(['node_modules','.git','build'].includes(n))continue;const p=join(d,n);if(statSync(p).isDirectory())yield* walk(p);else yield p}}
+function* walk(d){for(const n of readdirSync(d)){if(['node_modules','.git','build','ocr'].includes(n))continue;const p=join(d,n);if(statSync(p).isDirectory())yield* walk(p);else yield p}}
 const BIN=/\.(png|jpe?g|webp|zip|apk|ico|woff2?)$/i
 function main(dirs){
  let bad=0

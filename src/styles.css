@@ -46,3 +46,11 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 
 .just p,.just blockquote{text-align:justify;text-justify:inter-word;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
 .just h2{text-align:left}
+
+.card{display:flex;gap:.8rem;padding:.8rem;margin:.7rem 0;border-radius:12px;background:color-mix(in srgb,var(--fg) 7%,transparent)}
+.cvr{flex:none;width:6.2rem;height:8.8rem;padding:0;border:0;border-radius:6px;overflow:hidden;background:var(--ln);cursor:pointer}
+.cvimg{width:100%;height:100%;object-fit:cover;display:block}.cvph{display:flex;height:100%;align-items:center;justify-content:center;font:700 2.2rem Georgia,serif;color:var(--mut)}
+.meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:.4rem}
+.ttl2{background:none;border:0;padding:0;text-align:left;font-weight:600;font-size:1.05rem;line-height:1.3;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.bar{height:3px;background:var(--ln);border-radius:2px;margin-top:auto}.bar i{display:block;height:100%;background:var(--ac);border-radius:2px}
+.acts{display:flex;justify-content:space-between;align-items:center;gap:.5rem}

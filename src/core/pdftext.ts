@@ -49,6 +49,9 @@ export function pdfToParas(pages:PageT[]):Para[]{
    else cur.text=/[A-Za-z]-$/.test(cur.text)&&/^[a-z]/.test(l.text)?cur.text.slice(0,-1)+l.text:cur.text+' '+l.text
    prev=l}
  })
+ return mergeAcross(out)
+}
+export function mergeAcross(out:Para[]):Para[]{
  const merged:Para[]=[]
  for(const q of out){const p=merged[merged.length-1]
   if(p&&q.page===p.page+1&&p.kind==='paragraph'&&q.kind==='paragraph'&&!/[.!?:;”"')\]]\s*$/.test(p.text)&&/^[a-z(“"']/.test(q.text))

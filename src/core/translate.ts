@@ -27,11 +27,11 @@ export async function translateChapter(b:string,ch:Chapter,p:TranslationProvider
  }
 }
 export async function bookTodo(b:Book,p:string){let chars=0,blocks=0
- for(let ci=0;ci<b.toc.length;ci++){const ch=await loadChapter(b.id,ci);if(!ch)continue;const have=await loadTr(b.id,ch,p)
+ for(let ci=0;ci<b.toc.length;ci++){const ch=await loadChapter(b.id,ci);if(!ch||ch.ocr)continue;const have=await loadTr(b.id,ch,p)
   for(const k of ch.blocks)if(k.kind!=='image'&&k.text&&!have[k.id]){chars+=k.text.length;blocks++}}
  return{chars,blocks}}
 export async function translateBook(b:Book,p:TranslationProvider,onProg:(ci:number,n:number,d:number,t:number)=>void,s:AbortSignal){
- for(let ci=0;ci<b.toc.length;ci++){const ch=await loadChapter(b.id,ci);if(!ch)continue
+ for(let ci=0;ci<b.toc.length;ci++){const ch=await loadChapter(b.id,ci);if(!ch||ch.ocr)continue
   await translateChapter(b.id,ch,p,(d,t)=>onProg(ci,b.toc.length,d,t),s)}}
 export async function translateBlock(b:string,k:Block,p:TranslationProvider,s:AbortSignal){
  const out:string[]=[]

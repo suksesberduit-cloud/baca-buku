@@ -3,7 +3,8 @@ import type {Block,Book,Chapter} from './core/model'
 import {sha,chapterTitle} from './core/epub'
 import {StatusBar} from '@capacitor/status-bar'
 import {importBuffer} from './core/import'
-import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBook} from './core/db'
+import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBook,putChapter} from './core/db'
+import {ocrChapter} from './core/ocr'
 import {saveText,readUri} from './core/files'
 import {mock,translateChapter,loadTr,estimate,bookTodo,translateBook,translateBlock} from './core/translate'
 import type {TranslationProvider} from './core/translate'
@@ -22,6 +23,8 @@ type Mode='asli'|'terjemah'|'dua'
 interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean;just:boolean}
 const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true,just:true}
 const PX=20,PY=28
+const fmtSize=(n:number)=>n>=1048576?(n/1048576).toFixed(n>=10485760?0:1).replace('.',',')+' MB':Math.max(1,Math.round(n/1024))+' kB'
+const uriName=(url:string)=>{let s=url.split(/[?#]/)[0].split('/').pop()??'';try{s=decodeURIComponent(s)}catch{/* biarkan */};const nm=s.split(/[/:]/).pop()??'';return /\.[a-z0-9]{2,5}$/i.test(nm)?nm:''}
 const FONTS:Record<string,string>={serif:'Georgia,"Noto Serif",serif',sans:'system-ui,Roboto,sans-serif',mono:'ui-monospace,Menlo,monospace'}
 const THEMES:[string,string][]=[['putih','Putih'],['sepia','Sepia'],['abu','Abu-abu'],['gelap','Gelap'],['hitam','Hitam OLED']]
 const errMsg=(e:unknown)=>e instanceof DOMException&&e.name==='QuotaExceededError'?'Penyimpanan perangkat penuh. Hapus buku atau data lain, lalu coba lagi.':e instanceof Error?e.message:String(e)
@@ -43,7 +46,7 @@ export default function App(){
  useEffect(()=>{void navigator.storage?.persist?.();listBooks().then(setBooks);kvGet<S>('settings').then(v=>{if(v)setS({...DEF,...v});ready.current=true});kvGet<Cfg>('cfg').then(c=>{if(c){setCfg(c);void buildProvider(c).then(setProv)}})},[])
  useEffect(()=>{document.documentElement.dataset.theme=s.theme;if(ready.current)void kvSet('settings',s)},[s])
  useEffect(()=>{if(!cur)return;let dead=false
-  loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id));if(autoRef.current&&!bprog)void doTr(c,true)
+  loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id));if(c.ocr)void queueOcr(c);else if(autoRef.current&&!bprog)void doTr(c,true)
    requestAnimationFrame(()=>{if(viewRef.current==='scroll'){if(pendBlock.current)document.getElementById('b'+pendBlock.current)?.scrollIntoView({block:'center'});else if(main.current)main.current.scrollTop=pendY.current;pendBlock.current=''};pendY.current=0})})
   return()=>{dead=true}},[cur,ci,prov])
  useEffect(()=>{void navigator.storage?.estimate?.().then(e=>setStor(`Penyimpanan terpakai: ${((e.usage??0)/1048576).toFixed(1)} MB dari kuota sekitar ${((e.quota??0)/1073741824).toFixed(1)} GB.`))},[books])
@@ -62,9 +65,11 @@ useEffect(()=>{const el=wrap.current;if(!el||!cur||s.view!=='page')return
  useEffect(()=>{if(!cur||!ch||s.view!=='page'||!dim.w)return;const k=firstVisible();if(!k)return
   const id=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,bid:k.id}),350);return()=>clearTimeout(id)},[page,ci,cur,ch,s.view,dim.w])
 const lastUri=useRef('')
+ const[ocrP,setOcrP]=useState<[number,number]|null>(null);const[ocrAll,setOcrAll]=useState<[number,number]|null>(null)
+ const ciRef=useRef(0),ocrQ=useRef<Promise<unknown>>(Promise.resolve()),ocrStop=useRef(false),ocrBusy=useRef(new Set<string>())
  useEffect(()=>{if(!Capacitor.isNativePlatform())return
   const handle=async(url:string)=>{if(!url||url===lastUri.current)return;lastUri.current=url
-   try{const buf=await readUri(url);const b=await ingest(buf,'');if(b)await open(b)}
+   try{const buf=await readUri(url);const b=await ingest(buf,uriName(url));if(b)await open(b)}
    catch(e){alert('Gagal membuka berkas: '+errMsg(e))}finally{window.setTimeout(()=>{lastUri.current=''},3000)}}
   const h=CapApp.addListener('appUrlOpen',e=>void handle(e.url))
   void CapApp.getLaunchUrl().then(l=>{if(l?.url)void handle(l.url)})
@@ -77,11 +82,33 @@ const lastUri=useRef('')
   setBprog(null);if(ch)setTr(await loadTr(cur.id,ch,prov.id))}
  async function doExport(full:boolean){try{await saveText(`bacabuku-${full?'penuh':'ringan'}-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(await dump(full)))}catch(e){alert('Gagal ekspor: '+errMsg(e))}}
  async function doImport(f?:File){if(!f)return;try{const o:unknown=JSON.parse(await f.text());if(!confirm('Gabungkan cadangan ini ke data di perangkat? Data dengan kunci sama akan ditimpa.'))return;await restore(o);alert('Cadangan dipulihkan. Aplikasi dimuat ulang.');location.reload()}catch(e){alert('Gagal impor: '+errMsg(e))}}
+ function queueOcr(c:Chapter,show=true):Promise<boolean>{
+  const b=cur;if(!b||!c.ocr)return Promise.resolve(true)
+  const key=b.id+':'+c.id;if(ocrBusy.current.has(key))return Promise.resolve(true)
+  ocrBusy.current.add(key)
+  const job=ocrQ.current.then(async()=>{
+   const idx=Number(c.id),o=c.ocr!
+   try{if(show&&ciRef.current===idx)setOcrP([0,o.to-o.from+1])
+    const nc=await ocrChapter(b.id,c,(d,t)=>{if(show&&ciRef.current===idx)setOcrP([d,t])})
+    await putChapter(b.id,idx,nc)
+    const lb=(await listBooks()).find(x=>x.id===b.id)??b
+    const nb={...lb,toc:lb.toc.map((t,i)=>i===idx?nc.title:t)}
+    await putBook(nb);setCur(x=>x&&x.id===nb.id?nb:x);setBooks(await listBooks())
+    if(show&&ciRef.current===idx&&idx+1<b.toc.length){const nx=await loadChapter(b.id,idx+1);if(nx?.ocr)void queueOcr(nx,false)}
+    return true
+   }catch(e){alert('OCR gagal: '+errMsg(e));return false}
+   finally{ocrBusy.current.delete(key);setOcrP(null)}})
+  ocrQ.current=job;return job}
+ async function ocrBook(){if(!cur)return;if(ocrAll){ocrStop.current=true;return}
+  if(!confirm('OCR seluruh buku bisa memakan waktu lama dan menguras baterai. Boleh dihentikan kapan saja. Lanjutkan?'))return
+  ocrStop.current=false;const n=cur.toc.length
+  for(let i=0;i<n&&!ocrStop.current;i++){setOcrAll([i+1,n]);const c=await loadChapter(cur.id,i);if(c?.ocr&&!(await queueOcr(c,false)))break}
+  setOcrAll(null)}
  async function ingest(buf:ArrayBuffer,name:string):Promise<Book|null>{
   setBusy(true)
   try{const p=await importBuffer(buf,name);const id=await sha(p.buf)
-   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined}
-   await saveBook(b,p.chapters,p.images);setBooks(await listBooks());return b
+   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined,scan:p.scan||undefined,format:p.format,size:p.size}
+   await saveBook(b,p.chapters,p.images,p.file);setBooks(await listBooks());return b
   }catch(e){alert(errMsg(e));return null}finally{setBusy(false)}}
  async function onFile(f?:File){if(f)await ingest(await f.arrayBuffer(),f.name)}
  async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');setUi(false);setPage(0)
@@ -94,10 +121,10 @@ const lastUri=useRef('')
  function close(){stop();setPlaying(-1);ac.current?.abort();setCur(null);setCh(null);setPanel('');setUi(false);if(Capacitor.isNativePlatform())void StatusBar.show().catch(()=>undefined)}
  function go(n:number){if(!cur||n<0||n>=cur.toc.length)return;stop();if(!bprog)ac.current?.abort();setNote('');setPlaying(-1);pendY.current=0;pendBlock.current='';setCi(n);setPanel('');setUi(false);void kvSet('pos:'+cur.id,{ci:n,y:0})}
  function onScroll(){if(!cur)return;clearTimeout(tm.current);const y=main.current?.scrollTop??0;tm.current=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,y}),400)}
- async function doTr(c:Chapter|null=ch,auto=false){if(!cur||!c)return;const a=new AbortController();ac.current=a;setProg([0,c.blocks.filter(k=>k.kind!=='image').length])
+ async function doTr(c:Chapter|null=ch,auto=false){if(!cur||!c)return;if(c.ocr){if(!auto)alert('Bab ini belum selesai di-OCR. Tunggu sampai teksnya muncul.');return}const a=new AbortController();ac.current=a;setProg([0,c.blocks.filter(k=>k.kind!=='image').length])
   try{await translateChapter(cur.id,c,prov,(d,t)=>setProg([d,t]),a.signal)}catch(e){if(!a.signal.aborted){if(auto)setNote(errMsg(e));else alert(errMsg(e))}}
   const r=await loadTr(cur.id,c,prov.id);setTr(o=>({...o,...r}));setProg(null);if(!auto)setMode(m=>m==='asli'?'terjemah':m)}
- async function play(){if(!ch)return;const useTr=mode!=='asli'
+ async function play(){if(!ch||ch.ocr)return;const useTr=mode!=='asli'
   const idx=ch.blocks.map((_,i)=>i).filter(i=>ch.blocks[i].kind!=='image'&&(!useTr||tr[ch.blocks[i].id]))
   const texts=idx.map(i=>useTr?tr[ch.blocks[i].id]:ch.blocks[i].text)
   if(!texts.length)return alert('Belum ada terjemahan untuk dibacakan.')
@@ -111,7 +138,7 @@ const lastUri=useRef('')
  async function mark(){if(!cur||!ch)return;const k=firstVisible();if(!k)return
   setBms(await addBm(cur.id,{id:k.id,ci,snip:k.text.slice(0,90),at:Date.now()}))}
  async function tapBlock(k:Block){
-  if(mode!=='asli'||k.kind==='image'||!cur||window.getSelection()?.toString())return
+  if(mode!=='asli'||k.kind==='image'||!cur||ch?.ocr||window.getSelection()?.toString())return
   if(tr[k.id]){setRev(r=>({...r,[k.id]:!r[k.id]}));return}
   if(busyB)return;setBusyB(k.id)
   try{const t=await translateBlock(cur.id,k,prov,new AbortController().signal);setTr(o=>({...o,[k.id]:t}));setRev(r=>({...r,[k.id]:true}))}
@@ -136,7 +163,7 @@ const lastUri=useRef('')
   const c=e.changedTouches[0],dx=c.clientX-sw.current.x,dy=c.clientY-sw.current.y
   if(Math.abs(dx)>60&&Math.abs(dx)>1.6*Math.abs(dy)&&Date.now()-sw.current.t<900){if(dx<0)nextPage();else prevPage()}}
  const upd=(k:keyof S,v:string|number|boolean)=>setS(o=>({...o,[k]:v}))
- autoRef.current=s.auto
+ autoRef.current=s.auto;ciRef.current=ci
  dimRef.current=dim;viewRef.current=s.view
  backRef.current=()=>{if(panel){setPanel('');return true}if(ui){setUi(false);return true}if(cur){close();return true}return false}
  if(!cur)return(<div className="lib"><h1>Baca Buku</h1>
@@ -144,8 +171,13 @@ const lastUri=useRef('')
   {books.length===0&&<p className="muted">Belum ada buku. Impor berkas EPUB, FB2, PDF, MOBI, atau AZW3 dari penyimpanan HP untuk mulai membaca.</p>}
   {books.length>0&&<input className="srch" placeholder="Cari judul atau penulis" value={filter} onChange={e=>setFilter(e.target.value)}/>}
   {(()=>{const lb=books.find(b=>b.id===last);return lb&&!filter?<button className="btn big" onClick={()=>void open(lb)}>Lanjutkan: {lb.title}{pg[lb.id]!==undefined?` (bab ${pg[lb.id]+1}/${lb.toc.length})`:''}</button>:null})()}
-  {books.filter(b=>(b.title+' '+b.author).toLowerCase().includes(filter.toLowerCase())).map(b=><div className="book" key={b.id}>{b.cover&&<Img book={b.id} path={b.cover} alt="" cls="cov"/>}<button className="bt" onClick={()=>void open(b)}><b>{b.title}</b><span>{b.author} · {pg[b.id]!==undefined?`bab ${pg[b.id]+1} dari ${b.toc.length}`:`${b.toc.length} bab`}</span></button>
-   <button className="btn sm" onClick={()=>{if(confirm('Hapus buku dan terjemahannya dari perangkat?'))void deleteBook(b.id).then(async()=>setBooks(await listBooks()))}}>Hapus</button></div>)}
+  {books.filter(b=>(b.title+' '+b.author).toLowerCase().includes(filter.toLowerCase())).map(b=>{const pc=pg[b.id]!==undefined?Math.round(((pg[b.id]+1)/Math.max(1,b.toc.length))*100):0
+   return<div className="card" key={b.id}>
+    <button className="cvr" onClick={()=>void open(b)} aria-label={b.title}>{b.cover?<Img book={b.id} path={b.cover} alt="" cls="cvimg"/>:<span className="cvph">{b.title.slice(0,1)}</span>}</button>
+    <div className="meta"><button className="ttl2" onClick={()=>void open(b)}>{b.title}</button>
+     <small className="muted">{[b.format,b.size?fmtSize(b.size):'',b.scan?'OCR':''].filter(Boolean).join(', ')}{b.author&&b.author!=='Tidak diketahui'?' · '+b.author:''}</small>
+     <div className="bar"><i style={{width:pc+'%'}}/></div>
+     <div className="acts"><small className="muted">{b.toc.length} bab{pg[b.id]!==undefined?` · ${pc}%`:''}</small><button className="btn sm" onClick={()=>{if(confirm('Hapus buku dan terjemahannya dari perangkat?'))void deleteBook(b.id).then(async()=>setBooks(await listBooks()))}}>Hapus</button></div></div></div>})}
   <div className="bk"><b>Cadangan data</b>
    <div className="chips"><button className="btn sm" onClick={()=>void doExport(false)}>Ekspor ringan</button><button className="btn sm" onClick={()=>void doExport(true)}>Ekspor penuh</button>
    <label className="btn sm">Impor cadangan<input type="file" accept=".json,application/json" hidden onChange={e=>{void doImport(e.target.files?.[0]);e.target.value=''}}/></label></div>
@@ -163,9 +195,9 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
  return(<div className="rd" onTouchStart={onTS} onTouchEnd={onTE}>
   {s.view==='page'?<div className="pgwrap" ref={wrap}>
     <article ref={art} className={'pg'+(s.just?' just':'')} style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>
-    <div className="pnum">{page+1}/{pages} · Bab {ci+1} dari {total}{note?' · '+note:''}</div></div>
+    <div className="pnum">{page+1}/{pages} · Bab {ci+1} dari {total}{note?' · '+note:''}{ocrP?` · OCR ${ocrP[0]}/${ocrP[1]} hlm`:''}</div></div>
   :<div className="main" ref={main} onScroll={onScroll}><article className={s.just?'just':''} style={{...fs,maxWidth:s.width+'ch'} as React.CSSProperties}>
-    {ch?<><small className="muted">Bab {ci+1} dari {total}{mode==='asli'?' · ketuk paragraf untuk terjemahan':''}</small>{note&&<small className="muted"> · {note}</small>}{blocksEl}
+    {ch?<><small className="muted">Bab {ci+1} dari {total}{mode==='asli'?' · ketuk paragraf untuk terjemahan':''}</small>{note&&<small className="muted"> · {note}</small>}{ocrP&&<small className="muted"> · OCR {ocrP[0]}/{ocrP[1]} hlm</small>}{blocksEl}
      <div className="nav"><button className="btn" disabled={ci===0} onClick={()=>go(ci-1)}>Bab sebelumnya</button><button className="btn" disabled={ci>=total-1} onClick={()=>go(ci+1)}>Bab berikutnya</button></div></>:<p className="muted">Memuat bab…</p>}</article></div>}
   {ui&&<div className="ovt">
    <header><span className="ttl">{cur.title}</span><button className="btn sm xbtn" aria-label="Tutup menu" onClick={()=>{setUi(false);setPanel('')}}>✕</button>
@@ -189,7 +221,8 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
    {bms.map(m=><div className="book" key={m.id}><button className="row grow" onClick={()=>jump(m.ci,m.id)}><small className="muted">{cur.toc[m.ci]}</small><br/>{m.snip}</button><button className="btn sm" onClick={()=>void delBm(cur.id,m.id).then(setBms)}>Hapus</button></div>)}</div>}
   {panel==='api'&&<div className="panel"><ApiPanel cfg={cfg} onSave={c=>{setCfg(c);void kvSet('cfg',c);void buildProvider(c).then(setProv);setPanel('')}}/>
    <label><span>Terjemahkan otomatis bab yang dibuka</span><input type="checkbox" checked={s.auto} onChange={e=>{const on=e.target.checked;if(on&&prov.id!=='mock'&&prov.id!=='mlkit'&&!confirm('Terjemah otomatis memakai kuota/biaya penyedia setiap kali bab dibuka. Aktifkan?'))return;upd('auto',on);if(on)setMode(m=>m==='asli'?'dua':m)}}/></label>
-   <div className="bk"><b>Terjemahkan seluruh buku</b><button className="btn sm" onClick={()=>void doBook()}>{bprog?`Batal (bab ${bprog[0]+1}/${bprog[1]}, paragraf ${bprog[2]}/${bprog[3]})`:'Hitung dan mulai'}</button><small className="muted">Bisa dihentikan lalu dilanjutkan; paragraf yang sudah diterjemahkan tidak diulang.</small></div></div>}
+   <div className="bk"><b>Terjemahkan seluruh buku</b><button className="btn sm" onClick={()=>void doBook()}>{bprog?`Batal (bab ${bprog[0]+1}/${bprog[1]}, paragraf ${bprog[2]}/${bprog[3]})`:'Hitung dan mulai'}</button><small className="muted">Bisa dihentikan lalu dilanjutkan; paragraf yang sudah diterjemahkan tidak diulang.</small></div>
+   {cur.scan&&<div className="bk"><b>OCR seluruh buku</b><button className="btn sm" onClick={()=>void ocrBook()}>{ocrAll?`Berhenti (bab ${ocrAll[0]}/${ocrAll[1]})`:'Mulai OCR'}</button><small className="muted">Bab yang dibuka otomatis di-OCR; ini untuk memproses semuanya sekaligus.</small></div>}</div>}
   </div>}
   {ui&&<footer className="ovb">
    <select value={mode} onChange={e=>setMode(e.target.value as Mode)}><option value="asli">Teks asli</option><option value="terjemah">Terjemahan</option><option value="dua">Asli + terjemahan</option></select>

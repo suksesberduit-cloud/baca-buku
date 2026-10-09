@@ -2,19 +2,23 @@ import {openDB} from 'idb'
 import type {Book,Chapter,ImgEntry} from './model'
 // Lazy: IndexedDB baru dibuka saat dipakai (agar modul aman diimpor di tes Node).
 let _p:ReturnType<typeof mk>|undefined
-const mk=()=>openDB('bacabuku',2,{upgrade(d,old){
+const mk=()=>openDB('bacabuku',3,{upgrade(d,old){
  if(old<1){d.createObjectStore('books',{keyPath:'id'});d.createObjectStore('chapters');d.createObjectStore('tr');d.createObjectStore('kv')}
- if(old<2)d.createObjectStore('images')}})
+ if(old<2)d.createObjectStore('images')
+ if(old<3)d.createObjectStore('files')}})
 const P=()=>(_p??=mk())
 export const listBooks=async():Promise<Book[]>=>(await P()).getAll('books')
-export async function saveBook(b:Book,ch:Chapter[],images:ImgEntry[]=[]){const d=await P()
+export async function saveBook(b:Book,ch:Chapter[],images:ImgEntry[]=[],file?:ArrayBuffer){const d=await P()
+ if(file)await d.put('files',file,b.id)
  for(const [path,v] of images)await d.put('images',v,b.id+':'+path)
  for(let i=0;i<ch.length;i++)await d.put('chapters',ch[i],b.id+':'+i)
  await d.put('books',b)}
+export const putChapter=async(id:string,i:number,c:Chapter)=>{await (await P()).put('chapters',c,id+':'+i)}
+export const fileGet=async(id:string):Promise<ArrayBuffer|undefined>=>(await P()).get('files',id)
 export const putBook=async(b:Book)=>{await (await P()).put('books',b)}
 export const loadChapter=async(id:string,i:number):Promise<Chapter|undefined>=>(await P()).get('chapters',id+':'+i)
 export const imgGet=async(id:string,path:string):Promise<{type:string;data:ArrayBuffer}|undefined>=>(await P()).get('images',id+':'+path)
-export async function deleteBook(id:string){const d=await P();const r=IDBKeyRange.bound(id+':',id+':\uffff');await d.delete('chapters',r);await d.delete('images',r);await d.delete('tr',r);await d.delete('kv','pos:'+id);await d.delete('kv','bm:'+id);await d.delete('books',id)}
+export async function deleteBook(id:string){const d=await P();const r=IDBKeyRange.bound(id+':',id+':\uffff');await d.delete('chapters',r);await d.delete('images',r);await d.delete('files',id);await d.delete('tr',r);await d.delete('kv','pos:'+id);await d.delete('kv','bm:'+id);await d.delete('books',id)}
 export const trGet=async(k:string):Promise<string|undefined>=>(await P()).get('tr',k)
 export const trPut=async(k:string,v:string)=>{await (await P()).put('tr',v,k)}
 export const kvGet=async<T>(k:string):Promise<T|undefined>=>(await P()).get('kv',k)
