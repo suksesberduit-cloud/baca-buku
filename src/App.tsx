@@ -2,9 +2,9 @@ import {useEffect,useLayoutEffect,useRef,useState} from 'react'
 import type {Block,Book,Chapter} from './core/model'
 import {sha,chapterTitle} from './core/epub'
 import {StatusBar} from '@capacitor/status-bar'
-import {importFile} from './core/import'
+import {importBuffer} from './core/import'
 import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBook} from './core/db'
-import {saveText} from './core/files'
+import {saveText,readUri} from './core/files'
 import {mock,translateChapter,loadTr,estimate,bookTodo,translateBook,translateBlock} from './core/translate'
 import type {TranslationProvider} from './core/translate'
 import ApiPanel from './ApiPanel'
@@ -61,6 +61,14 @@ useEffect(()=>{const el=wrap.current;if(!el||!cur||s.view!=='page')return
   else setPage(p=>Math.min(p,n-1))},[ch,tr,rev,mode,dim,s.size,s.lh,s.gap,s.font,s.view,tick,busyB,cur])
  useEffect(()=>{if(!cur||!ch||s.view!=='page'||!dim.w)return;const k=firstVisible();if(!k)return
   const id=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,bid:k.id}),350);return()=>clearTimeout(id)},[page,ci,cur,ch,s.view,dim.w])
+const lastUri=useRef('')
+ useEffect(()=>{if(!Capacitor.isNativePlatform())return
+  const handle=async(url:string)=>{if(!url||url===lastUri.current)return;lastUri.current=url
+   try{const buf=await readUri(url);const b=await ingest(buf,'');if(b)await open(b)}
+   catch(e){alert('Gagal membuka berkas: '+errMsg(e))}finally{window.setTimeout(()=>{lastUri.current=''},3000)}}
+  const h=CapApp.addListener('appUrlOpen',e=>void handle(e.url))
+  void CapApp.getLaunchUrl().then(l=>{if(l?.url)void handle(l.url)})
+  return()=>{void h.then(x=>x.remove())}},[])
  async function doBook(){if(!cur)return;if(bprog){ac.current?.abort();return}
   const{chars,blocks}=await bookTodo(cur,prov.id);if(!blocks)return alert('Seluruh buku sudah diterjemahkan dengan penyedia ini.')
   if(!confirm(`Akan menerjemahkan ${blocks} paragraf (${chars.toLocaleString('id-ID')} karakter) memakai ${prov.label}. ${prov.id==='mock'?'Ini hasil tiruan, bukan terjemahan sungguhan.':'Teks dikirim ke penyedia dan bisa dikenai biaya sesuai akun Anda.'} Lanjutkan?`))return
@@ -69,11 +77,13 @@ useEffect(()=>{const el=wrap.current;if(!el||!cur||s.view!=='page')return
   setBprog(null);if(ch)setTr(await loadTr(cur.id,ch,prov.id))}
  async function doExport(full:boolean){try{await saveText(`bacabuku-${full?'penuh':'ringan'}-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(await dump(full)))}catch(e){alert('Gagal ekspor: '+errMsg(e))}}
  async function doImport(f?:File){if(!f)return;try{const o:unknown=JSON.parse(await f.text());if(!confirm('Gabungkan cadangan ini ke data di perangkat? Data dengan kunci sama akan ditimpa.'))return;await restore(o);alert('Cadangan dipulihkan. Aplikasi dimuat ulang.');location.reload()}catch(e){alert('Gagal impor: '+errMsg(e))}}
- async function onFile(f?:File){if(!f)return
+ async function ingest(buf:ArrayBuffer,name:string):Promise<Book|null>{
   setBusy(true)
-  try{const p=await importFile(f);const id=await sha(p.buf)
-   await saveBook({id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined},p.chapters,p.images);setBooks(await listBooks())
-  }catch(e){alert(errMsg(e))}finally{setBusy(false)}}
+  try{const p=await importBuffer(buf,name);const id=await sha(p.buf)
+   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined}
+   await saveBook(b,p.chapters,p.images);setBooks(await listBooks());return b
+  }catch(e){alert(errMsg(e));return null}finally{setBusy(false)}}
+ async function onFile(f?:File){if(f)await ingest(await f.arrayBuffer(),f.name)}
  async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');setUi(false);setPage(0)
   const p=await kvGet<{ci:number;y?:number;bid?:string}>('pos:'+b.id);pendY.current=p?.y??0;pendBlock.current=p?.bid??'';pendLast.current=false
   setCh(null);setCi(p?.ci??0);setCur(b);setMode('asli');setHint(true);window.setTimeout(()=>setHint(false),6500)

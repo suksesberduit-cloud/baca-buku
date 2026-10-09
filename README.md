@@ -38,3 +38,6 @@ Teks memenuhi layar. Geser kanan ke kiri = halaman berikutnya, kiri ke kanan = s
 
 ## Tes koneksi, tombol putar kecil, TTS latar belakang
 Panel Terjemah punya "Tes koneksi" (menerjemahkan satu kalimat contoh dan menampilkan hasil atau pesan galat). Tombol putar kecil di pojok kanan bawah tetap tampil saat menu tersembunyi (bisa dimatikan di Tampilan). TTS native mengantrekan hingga 20 paragraf sekaligus ke mesin Android agar terus berbicara walau JavaScript ditahan saat layar mati. Belum ada layanan foreground; jika masih berhenti di latar belakang, langkah berikutnya adalah plugin foreground service. Di HP Xiaomi/MIUI atur Hemat baterai aplikasi ke "Tanpa batasan".
+
+## Buka dengan
+Di APK, EPUB dan FB2 dari pengelola berkas bisa dibuka dengan "Baca Buku" (ditambahkan ke daftar pilihan aplikasi; pilih Selalu untuk menjadikannya bawaan). Buku otomatis diimpor lalu dibuka. Filter dipasang oleh `scripts/patch-manifest.py` saat build APK. Jika pengelola berkas melaporkan tipe berkas yang tidak dikenal, gunakan tombol Impor buku di aplikasi.

@@ -15,3 +15,10 @@ export async function saveText(name:string,text:string){
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;a.click()
  setTimeout(()=>URL.revokeObjectURL(a.href),5000)
 }
+// Membaca berkas dari URI Android (content://, file://) yang diberikan lewat "Buka dengan".
+export async function readUri(url:string):Promise<ArrayBuffer>{
+ try{const r=await fetch(Capacitor.convertFileSrc(url));if(r.ok)return await r.arrayBuffer()}catch{/* coba jalur lain */}
+ const {data}=await Filesystem.readFile({path:url})
+ if(typeof data==='string')return Uint8Array.from(atob(data),c=>c.charCodeAt(0)).buffer as ArrayBuffer
+ return await data.arrayBuffer()
+}

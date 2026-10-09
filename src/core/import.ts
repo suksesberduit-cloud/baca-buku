@@ -1,11 +1,16 @@
 import {parseEpub} from './epub'
 import {parseFb2} from './fb2'
 import type {ImgEntry} from './model'
-export async function importFile(f:File){
- const buf=await f.arrayBuffer();const n=f.name.toLowerCase()
- if(n.endsWith('.epub'))return{buf,...await parseEpub(buf)}
- if(n.endsWith('.fb2'))return{buf,images:[] as ImgEntry[],cover:'',...await parseFb2(buf)}
+// Format dikenali dari ekstensi; jika tidak ada ekstensi (mis. dibuka dari pengelola berkas Android), dari isi berkas.
+export async function importBuffer(buf:ArrayBuffer,name=''){
+ const n=name.toLowerCase()
  if(/\.djvu?$/.test(n))throw new Error('DJVU tidak didukung. Gunakan EPUB.')
  if(n.endsWith('.lit'))throw new Error('LIT tidak bisa dibaca langsung. Konversi dulu ke EPUB (mis. dengan Calibre), lalu impor EPUB-nya.')
+ const head=new Uint8Array(buf,0,Math.min(buf.byteLength,2048))
+ const zip=head[0]===0x50&&head[1]===0x4b
+ const fb2=/<FictionBook/i.test(new TextDecoder('latin1').decode(head))
+ if(n.endsWith('.epub')||(!n.endsWith('.fb2')&&zip))return{buf,...await parseEpub(buf)}
+ if(n.endsWith('.fb2')||fb2)return{buf,images:[] as ImgEntry[],cover:'',...await parseFb2(buf)}
  throw new Error('Format tidak dikenali. Yang didukung: EPUB dan FB2.')
 }
+export async function importFile(f:File){return importBuffer(await f.arrayBuffer(),f.name)}

@@ -18,6 +18,7 @@ jobs:
       - run: node scripts/scan-secrets.mjs .
       - run: npx cap add android
       - run: cp -r assets/android-res/. android/app/src/main/res/
+      - run: python3 scripts/patch-manifest.py
       - run: sed -i 's#</manifest>#<queries><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries></manifest>#' android/app/src/main/AndroidManifest.xml
       - run: npx cap sync android
       - uses: actions/cache@v4
