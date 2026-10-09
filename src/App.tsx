@@ -19,8 +19,8 @@ import {buildProvider} from './providers/config'
 import type {Cfg} from './providers/config'
 import {speak,stop,pause,resume,hasVoice} from './core/tts'
 type Mode='asli'|'terjemah'|'dua'
-interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean}
-const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true}
+interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean;just:boolean}
+const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true,just:true}
 const PX=20,PY=28
 const FONTS:Record<string,string>={serif:'Georgia,"Noto Serif",serif',sans:'system-ui,Roboto,sans-serif',mono:'ui-monospace,Menlo,monospace'}
 const THEMES:[string,string][]=[['putih','Putih'],['sepia','Sepia'],['abu','Abu-abu'],['gelap','Gelap'],['hitam','Hitam OLED']]
@@ -140,8 +140,8 @@ const lastUri=useRef('')
  dimRef.current=dim;viewRef.current=s.view
  backRef.current=()=>{if(panel){setPanel('');return true}if(ui){setUi(false);return true}if(cur){close();return true}return false}
  if(!cur)return(<div className="lib"><h1>Baca Buku</h1>
-  <label className="btn big">{busy?'Mengimpor…':'Impor buku (EPUB, FB2)'}<input type="file" accept=".epub,.fb2,application/epub+zip,application/x-fictionbook+xml" hidden onChange={e=>{void onFile(e.target.files?.[0]);e.target.value=''}}/></label>
-  {books.length===0&&<p className="muted">Belum ada buku. Impor berkas EPUB atau FB2 dari penyimpanan HP untuk mulai membaca.</p>}
+  <label className="btn big">{busy?'Mengimpor…':'Impor buku (EPUB, FB2, PDF, MOBI, AZW3)'}<input type="file" accept=".epub,.fb2,.pdf,.mobi,.azw3,.azw,application/epub+zip,application/x-fictionbook+xml,application/pdf" hidden onChange={e=>{void onFile(e.target.files?.[0]);e.target.value=''}}/></label>
+  {books.length===0&&<p className="muted">Belum ada buku. Impor berkas EPUB, FB2, PDF, MOBI, atau AZW3 dari penyimpanan HP untuk mulai membaca.</p>}
   {books.length>0&&<input className="srch" placeholder="Cari judul atau penulis" value={filter} onChange={e=>setFilter(e.target.value)}/>}
   {(()=>{const lb=books.find(b=>b.id===last);return lb&&!filter?<button className="btn big" onClick={()=>void open(lb)}>Lanjutkan: {lb.title}{pg[lb.id]!==undefined?` (bab ${pg[lb.id]+1}/${lb.toc.length})`:''}</button>:null})()}
   {books.filter(b=>(b.title+' '+b.author).toLowerCase().includes(filter.toLowerCase())).map(b=><div className="book" key={b.id}>{b.cover&&<Img book={b.id} path={b.cover} alt="" cls="cov"/>}<button className="bt" onClick={()=>void open(b)}><b>{b.title}</b><span>{b.author} · {pg[b.id]!==undefined?`bab ${pg[b.id]+1} dari ${b.toc.length}`:`${b.toc.length} bab`}</span></button>
@@ -157,14 +157,14 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
  const blocksEl=ch?ch.blocks.map((k,i)=>{const t=tr[k.id];const Tag=k.kind==='heading'?'h2':k.kind==='quote'?'blockquote':'p'
   if(k.kind==='image')return<div id={'b'+k.id} key={k.id} className="img"><Img book={cur.id} path={k.src??''} alt={k.text} onLoad={()=>setTick(n=>n+1)}/></div>
   return<div id={'b'+k.id} key={k.id} onClick={()=>void tapBlock(k)} className={(playing===i||hit===k.id?'hl':'')+(bms.some(m=>m.id===k.id)?' bm':'')}>
-   {(mode!=='terjemah'||!t)&&<Tag className={mode==='terjemah'?'blm':''}>{k.text}</Tag>}
-   {mode!=='asli'&&t&&<Tag className={mode==='dua'?'tr':''}>{t}</Tag>}
-   {mode==='asli'&&rev[k.id]&&t&&<Tag className="tr">{t}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>}):null
+   {(mode!=='terjemah'||!t)&&<Tag lang="en" className={mode==='terjemah'?'blm':''}>{k.text}</Tag>}
+   {mode!=='asli'&&t&&<Tag lang="id" className={mode==='dua'?'tr':''}>{t}</Tag>}
+   {mode==='asli'&&rev[k.id]&&t&&<Tag lang="id" className="tr">{t}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>}):null
  return(<div className="rd" onTouchStart={onTS} onTouchEnd={onTE}>
   {s.view==='page'?<div className="pgwrap" ref={wrap}>
-    <article ref={art} className="pg" style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>
+    <article ref={art} className={'pg'+(s.just?' just':'')} style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>
     <div className="pnum">{page+1}/{pages} · Bab {ci+1} dari {total}{note?' · '+note:''}</div></div>
-  :<div className="main" ref={main} onScroll={onScroll}><article style={{...fs,maxWidth:s.width+'ch'} as React.CSSProperties}>
+  :<div className="main" ref={main} onScroll={onScroll}><article className={s.just?'just':''} style={{...fs,maxWidth:s.width+'ch'} as React.CSSProperties}>
     {ch?<><small className="muted">Bab {ci+1} dari {total}{mode==='asli'?' · ketuk paragraf untuk terjemahan':''}</small>{note&&<small className="muted"> · {note}</small>}{blocksEl}
      <div className="nav"><button className="btn" disabled={ci===0} onClick={()=>go(ci-1)}>Bab sebelumnya</button><button className="btn" disabled={ci>=total-1} onClick={()=>go(ci+1)}>Bab berikutnya</button></div></>:<p className="muted">Memuat bab…</p>}</article></div>}
   {ui&&<div className="ovt">
@@ -173,7 +173,8 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
   {panel==='toc'&&<div className="panel">{cur.toc.map((t,i)=><button key={i} className={'row'+(i===ci?' on':'')} onClick={()=>go(i)}><span className="num">{i+1}.</span> {t}</button>)}</div>}
   {panel==='tampil'&&<div className="panel">
    <div className="chips">{THEMES.map(([k,l])=><button key={k} className={'btn sm'+(s.theme===k?' on':'')} onClick={()=>upd('theme',k)}>{l}</button>)}</div>
-   <label><span>Tombol putar kecil di layar</span><input type="checkbox" checked={s.mini} onChange={e=>upd('mini',e.target.checked)}/></label>
+   <label><span>Teks rata kiri-kanan (justify)</span><input type="checkbox" checked={s.just} onChange={e=>upd('just',e.target.checked)}/></label>
+    <label><span>Tombol putar kecil di layar</span><input type="checkbox" checked={s.mini} onChange={e=>upd('mini',e.target.checked)}/></label>
     <label>Mode baca <select value={s.view} onChange={e=>upd('view',e.target.value)}><option value="page">Halaman (geser)</option><option value="scroll">Gulir</option></select></label>
    <label>Huruf <select value={s.font} onChange={e=>upd('font',e.target.value)}><option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option></select></label>
    <label>Ukuran {s.size}<input type="range" min="14" max="30" value={s.size} onChange={e=>upd('size',+e.target.value)}/></label>

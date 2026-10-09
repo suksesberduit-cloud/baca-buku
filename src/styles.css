@@ -43,3 +43,6 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 .hrow{display:flex;flex-wrap:wrap;gap:.4rem;width:100%}.xbtn{font-weight:700}.num{color:var(--mut)}
 .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:2.2rem;background:rgba(0,0,0,.75);color:#fff;padding:.55em .95em;border-radius:1rem;font-size:.78rem;z-index:4;pointer-events:none;text-align:center;max-width:90%}
 .mini{position:absolute;right:10px;bottom:26px;z-index:4;display:flex;gap:6px}.mini button{width:2.4rem;height:2.4rem;border-radius:50%;border:1px solid var(--ln);background:var(--bg);color:var(--fg);opacity:.75;font-size:.85rem}
+
+.just p,.just blockquote{text-align:justify;text-justify:inter-word;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
+.just h2{text-align:left}

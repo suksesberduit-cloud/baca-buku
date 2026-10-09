@@ -24,7 +24,9 @@
   "@capacitor/share": "^6.0.0",
   "@capacitor/app": "^6.0.0",
   "@capacitor-mlkit/translation": "^6.0.0",
-  "@capacitor/status-bar": "^6.0.0"
+  "@capacitor/status-bar": "^6.0.0",
+  "pdfjs-dist": "3.11.174",
+  "@lingo-reader/mobi-parser": "0.4.1"
  },
  "devDependencies": {
   "@types/react": "^18.3.3",
