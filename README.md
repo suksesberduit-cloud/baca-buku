@@ -47,3 +47,9 @@ PDF: hanya yang berisi teks (pdf.js); paragraf disusun dari posisi teks, nomor h
 
 ## PDF: judul, sampul, dan OCR
 Judul PDF memakai nama berkas unduhan (tanpa ekstensi) dan sampulnya halaman pertama. Perpustakaan menampilkan sampul, judul, format dan ukuran (mis. "PDF, 14 MB"), serta bilah progres. PDF pindaian (tanpa teks) diimpor cepat sebagai buku dengan bab "menunggu OCR"; bab yang dibuka otomatis di-OCR di perangkat dengan Tesseract.js (Inggris + Indonesia, berkas dibundel di public/ocr oleh scripts/copy-ocr-assets.mjs saat build) dan bab berikutnya diproses di latar. Panel Terjemah punya "OCR seluruh buku". Berkas PDF asli disimpan di perangkat untuk OCR dan tidak ikut ekspor cadangan. Hasil OCR bisa salah baca, terutama pada pindaian buram.
+
+## PDF pindaian: penampil halaman gambar
+PDF pindaian sekarang dibuka sebagai halaman gambar (cepat, tanpa OCR dan tanpa terjemahan): geser kanan-kiri untuk pindah halaman, ketuk dua kali untuk memperbesar, daftar isi dan lompat halaman di menu dua jari. OCR teks bisa dinyalakan di Tampilan ("tampilkan teks hasil OCR"). Buku pindaian lama otomatis dilengkapi data halaman saat dibuka.
+
+## Buka dengan (semua format)
+`scripts/patch-manifest.py` memasang 3 intent-filter: tipe MIME (termasuk application/octet-stream untuk .fb2/.azw3 yang tidak dikenal Android), ekstensi dengan tipe */*, dan ekstensi tanpa tipe. Mencakup EPUB, FB2, PDF (teks dan pindaian), MOBI, AZW, AZW3. Format dideteksi dari isi berkas bila URI tidak memuat nama. Tidak didaftarkan untuk semua tipe berkas (*/* tanpa batasan) agar tidak muncul di setiap jenis berkas.

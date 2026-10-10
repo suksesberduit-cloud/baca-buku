@@ -5,6 +5,9 @@ import {StatusBar} from '@capacitor/status-bar'
 import {importBuffer} from './core/import'
 import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBook,putChapter} from './core/db'
 import {ocrChapter} from './core/ocr'
+import ScanView from './ScanView'
+import {getPdfDoc} from './core/pdfdoc'
+import {scanRanges} from './core/pdf'
 import {saveText,readUri} from './core/files'
 import {mock,translateChapter,loadTr,estimate,bookTodo,translateBook,translateBlock} from './core/translate'
 import type {TranslationProvider} from './core/translate'
@@ -20,8 +23,8 @@ import {buildProvider} from './providers/config'
 import type {Cfg} from './providers/config'
 import {speak,stop,pause,resume,hasVoice} from './core/tts'
 type Mode='asli'|'terjemah'|'dua'
-interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean;just:boolean}
-const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true,just:true}
+interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean;just:boolean;scanText:boolean}
+const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true,just:true,scanText:false}
 const PX=20,PY=28
 const fmtSize=(n:number)=>n>=1048576?(n/1048576).toFixed(n>=10485760?0:1).replace('.',',')+' MB':Math.max(1,Math.round(n/1024))+' kB'
 const uriName=(url:string)=>{let s=url.split(/[?#]/)[0].split('/').pop()??'';try{s=decodeURIComponent(s)}catch{/* biarkan */};const nm=s.split(/[/:]/).pop()??'';return /\.[a-z0-9]{2,5}$/i.test(nm)?nm:''}
@@ -45,10 +48,10 @@ export default function App(){
  const ac=useRef<AbortController|null>(null),main=useRef<HTMLDivElement>(null),pendY=useRef(0),ready=useRef(false),tm=useRef(0)
  useEffect(()=>{void navigator.storage?.persist?.();listBooks().then(setBooks);kvGet<S>('settings').then(v=>{if(v)setS({...DEF,...v});ready.current=true});kvGet<Cfg>('cfg').then(c=>{if(c){setCfg(c);void buildProvider(c).then(setProv)}})},[])
  useEffect(()=>{document.documentElement.dataset.theme=s.theme;if(ready.current)void kvSet('settings',s)},[s])
- useEffect(()=>{if(!cur)return;let dead=false
+ useEffect(()=>{if(!cur)return;if(cur.scan&&cur.ranges&&!s.scanText){setCh(null);return};let dead=false
   loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id));if(c.ocr)void queueOcr(c);else if(autoRef.current&&!bprog)void doTr(c,true)
    requestAnimationFrame(()=>{if(viewRef.current==='scroll'){if(pendBlock.current)document.getElementById('b'+pendBlock.current)?.scrollIntoView({block:'center'});else if(main.current)main.current.scrollTop=pendY.current;pendBlock.current=''};pendY.current=0})})
-  return()=>{dead=true}},[cur,ci,prov])
+  return()=>{dead=true}},[cur,ci,prov,s.scanText])
  useEffect(()=>{void navigator.storage?.estimate?.().then(e=>setStor(`Penyimpanan terpakai: ${((e.usage??0)/1048576).toFixed(1)} MB dari kuota sekitar ${((e.quota??0)/1073741824).toFixed(1)} GB.`))},[books])
  useEffect(()=>{void (async()=>{const o:Record<string,number>={};for(const b of books){const p=await kvGet<{ci:number}>('pos:'+b.id);if(p)o[b.id]=p.ci};setPg(o);setLast((await kvGet<string>('last'))??'')})()},[books,cur])
  useEffect(()=>{if(!Capacitor.isNativePlatform())return;const h=CapApp.addListener('backButton',()=>{if(!backRef.current())void CapApp.exitApp()});return()=>{void h.then(x=>x.remove())}},[])
@@ -66,7 +69,8 @@ useEffect(()=>{const el=wrap.current;if(!el||!cur||s.view!=='page')return
   const id=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,bid:k.id}),350);return()=>clearTimeout(id)},[page,ci,cur,ch,s.view,dim.w])
 const lastUri=useRef('')
  const[ocrP,setOcrP]=useState<[number,number]|null>(null);const[ocrAll,setOcrAll]=useState<[number,number]|null>(null)
- const ciRef=useRef(0),ocrQ=useRef<Promise<unknown>>(Promise.resolve()),ocrStop=useRef(false),ocrBusy=useRef(new Set<string>())
+ const ciRef=useRef(0),ocrQ=useRef<Promise<unknown>>(Promise.resolve()),ocrStop=useRef(false),ocrBusy=useRef(new Set<string>()),scanRef=useRef(false)
+ const[sp,setSp]=useState(0);const[zoom,setZoom]=useState(1)
  useEffect(()=>{if(!Capacitor.isNativePlatform())return
   const handle=async(url:string)=>{if(!url||url===lastUri.current)return;lastUri.current=url
    try{const buf=await readUri(url);const b=await ingest(buf,uriName(url));if(b)await open(b)}
@@ -82,6 +86,9 @@ const lastUri=useRef('')
   setBprog(null);if(ch)setTr(await loadTr(cur.id,ch,prov.id))}
  async function doExport(full:boolean){try{await saveText(`bacabuku-${full?'penuh':'ringan'}-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(await dump(full)))}catch(e){alert('Gagal ekspor: '+errMsg(e))}}
  async function doImport(f?:File){if(!f)return;try{const o:unknown=JSON.parse(await f.text());if(!confirm('Gabungkan cadangan ini ke data di perangkat? Data dengan kunci sama akan ditimpa.'))return;await restore(o);alert('Cadangan dipulihkan. Aplikasi dimuat ulang.');location.reload()}catch(e){alert('Gagal impor: '+errMsg(e))}}
+ const scanImg=!!cur?.scan&&!!cur.ranges&&!s.scanText
+ const chOfPage=(p:number)=>{const i=(cur?.ranges??[]).findIndex(x=>p>=x[0]&&p<=x[1]);return i<0?0:i}
+ function gotoPage(n:number){const t=Math.max(0,Math.min((cur?.pages??1)-1,n));setSp(t);setZoom(1);if(cur)void kvSet('pos:'+cur.id,{ci:chOfPage(t),sp:t})}
  function queueOcr(c:Chapter,show=true):Promise<boolean>{
   const b=cur;if(!b||!c.ocr)return Promise.resolve(true)
   const key=b.id+':'+c.id;if(ocrBusy.current.has(key))return Promise.resolve(true)
@@ -107,19 +114,22 @@ const lastUri=useRef('')
  async function ingest(buf:ArrayBuffer,name:string):Promise<Book|null>{
   setBusy(true)
   try{const p=await importBuffer(buf,name);const id=await sha(p.buf)
-   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined,scan:p.scan||undefined,format:p.format,size:p.size}
+   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined,scan:p.scan||undefined,format:p.format,size:p.size,pages:p.pages,ranges:p.ranges}
    await saveBook(b,p.chapters,p.images,p.file);setBooks(await listBooks());return b
   }catch(e){alert(errMsg(e));return null}finally{setBusy(false)}}
  async function onFile(f?:File){if(f)await ingest(await f.arrayBuffer(),f.name)}
  async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');setUi(false);setPage(0)
-  const p=await kvGet<{ci:number;y?:number;bid?:string}>('pos:'+b.id);pendY.current=p?.y??0;pendBlock.current=p?.bid??'';pendLast.current=false
+  const p=await kvGet<{ci:number;y?:number;bid?:string;sp?:number}>('pos:'+b.id);pendY.current=p?.y??0;setSp(p?.sp??0);setZoom(1);pendBlock.current=p?.bid??'';pendLast.current=false
   setCh(null);setCi(p?.ci??0);setCur(b);setMode('asli');setHint(true);window.setTimeout(()=>setHint(false),6500)
   if(Capacitor.isNativePlatform())void StatusBar.hide().catch(()=>undefined)
-  void refreshToc(b)}
- async function refreshToc(b:Book){const t:string[]=[];for(let i=0;i<b.toc.length;i++){const c=await loadChapter(b.id,i);t.push(c?chapterTitle(c.blocks)||b.toc[i]:b.toc[i])}
+  if(b.scan){if(!b.ranges)void backfill(b)}else void refreshToc(b)}
+ async function backfill(b:Book){try{const doc=await getPdfDoc(b.id);const r=await scanRanges(doc)
+   const nb:Book={...b,pages:doc.numPages,ranges:r.map(x=>[x.from,x.to] as [number,number]),toc:r.map(x=>x.title)}
+   await putBook(nb);setCur(c=>c&&c.id===nb.id?nb:c);setBooks(await listBooks())}catch{/* tetap mode teks */}}
+ async function refreshToc(b:Book){const t:string[]=[];for(let i=0;i<b.toc.length;i++){const c=await loadChapter(b.id,i);t.push(c&&!c.ocr?chapterTitle(c.blocks)||b.toc[i]:b.toc[i])}
   if(t.some((x,i)=>x!==b.toc[i])){const nb={...b,toc:t};await putBook(nb);setCur(c=>c&&c.id===nb.id?nb:c);setBooks(await listBooks())}}
  function close(){stop();setPlaying(-1);ac.current?.abort();setCur(null);setCh(null);setPanel('');setUi(false);if(Capacitor.isNativePlatform())void StatusBar.show().catch(()=>undefined)}
- function go(n:number){if(!cur||n<0||n>=cur.toc.length)return;stop();if(!bprog)ac.current?.abort();setNote('');setPlaying(-1);pendY.current=0;pendBlock.current='';setCi(n);setPanel('');setUi(false);void kvSet('pos:'+cur.id,{ci:n,y:0})}
+ function go(n:number){if(!cur||n<0||n>=cur.toc.length)return;if(scanImg&&cur.ranges){gotoPage(cur.ranges[n][0]);setPanel('');setUi(false);return}stop();if(!bprog)ac.current?.abort();setNote('');setPlaying(-1);pendY.current=0;pendBlock.current='';setCi(n);setPanel('');setUi(false);void kvSet('pos:'+cur.id,{ci:n,y:0})}
  function onScroll(){if(!cur)return;clearTimeout(tm.current);const y=main.current?.scrollTop??0;tm.current=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,y}),400)}
  async function doTr(c:Chapter|null=ch,auto=false){if(!cur||!c)return;if(c.ocr){if(!auto)alert('Bab ini belum selesai di-OCR. Tunggu sampai teksnya muncul.');return}const a=new AbortController();ac.current=a;setProg([0,c.blocks.filter(k=>k.kind!=='image').length])
   try{await translateChapter(cur.id,c,prov,(d,t)=>setProg([d,t]),a.signal)}catch(e){if(!a.signal.aborted){if(auto)setNote(errMsg(e));else alert(errMsg(e))}}
@@ -150,8 +160,8 @@ const lastUri=useRef('')
  function reveal(id:string,smooth=false){const el=document.getElementById('b'+id);if(!el)return
   if(viewRef.current==='page'){if(dimRef.current.w)setPage(Math.max(0,Math.floor((el.offsetLeft+2)/dimRef.current.w)))}
   else el.scrollIntoView({block:'center',behavior:smooth?'smooth':'auto'})}
- function nextPage(){if(page<pages-1)setPage(page+1);else if(cur&&ci<cur.toc.length-1)go(ci+1)}
- function prevPage(){if(page>0)setPage(page-1);else if(ci>0){pendLast.current=true;go(ci-1)}}
+ function nextPage(){if(scanImg){gotoPage(sp+1);return}if(page<pages-1)setPage(page+1);else if(cur&&ci<cur.toc.length-1)go(ci+1)}
+ function prevPage(){if(scanImg){gotoPage(sp-1);return}if(page>0)setPage(page-1);else if(ci>0){pendLast.current=true;go(ci-1)}}
  function onTS(e:React.TouchEvent){const t=e.touches
   if(t.length>=2){sw.current.multi=true;const H=window.innerHeight,W=window.innerWidth,a=t[0],b=t[1]
    if(a.clientY<H*0.3&&b.clientY<H*0.3&&Math.min(a.clientX,b.clientX)<W*0.45&&Math.max(a.clientX,b.clientX)>W*0.55){if(ui){setUi(false);setPanel('')}else setUi(true)}
@@ -159,11 +169,12 @@ const lastUri=useRef('')
   sw.current={x:t[0].clientX,y:t[0].clientY,t:Date.now(),multi:false}}
  function onTE(e:React.TouchEvent){
   if(sw.current.multi){if(e.touches.length===0)sw.current.multi=false;return}
-  if(viewRef.current!=='page')return
+  if(scanImg&&zoom>1)return
+  if(!scanImg&&viewRef.current!=='page')return
   const c=e.changedTouches[0],dx=c.clientX-sw.current.x,dy=c.clientY-sw.current.y
   if(Math.abs(dx)>60&&Math.abs(dx)>1.6*Math.abs(dy)&&Date.now()-sw.current.t<900){if(dx<0)nextPage();else prevPage()}}
  const upd=(k:keyof S,v:string|number|boolean)=>setS(o=>({...o,[k]:v}))
- autoRef.current=s.auto;ciRef.current=ci
+ autoRef.current=s.auto;ciRef.current=ci;scanRef.current=scanImg
  dimRef.current=dim;viewRef.current=s.view
  backRef.current=()=>{if(panel){setPanel('');return true}if(ui){setUi(false);return true}if(cur){close();return true}return false}
  if(!cur)return(<div className="lib"><h1>Baca Buku</h1>
@@ -193,7 +204,7 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
    {mode!=='asli'&&t&&<Tag lang="id" className={mode==='dua'?'tr':''}>{t}</Tag>}
    {mode==='asli'&&rev[k.id]&&t&&<Tag lang="id" className="tr">{t}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>}):null
  return(<div className="rd" onTouchStart={onTS} onTouchEnd={onTE}>
-  {s.view==='page'?<div className="pgwrap" ref={wrap}>
+  {scanImg&&cur?<ScanView bookId={cur.id} page={sp} pages={cur.pages??1} zoom={zoom} onZoom={()=>setZoom(z=>z>1?1:2.4)}/>:s.view==='page'?<div className="pgwrap" ref={wrap}>
     <article ref={art} className={'pg'+(s.just?' just':'')} style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>
     <div className="pnum">{page+1}/{pages} · Bab {ci+1} dari {total}{note?' · '+note:''}{ocrP?` · OCR ${ocrP[0]}/${ocrP[1]} hlm`:''}</div></div>
   :<div className="main" ref={main} onScroll={onScroll}><article className={s.just?'just':''} style={{...fs,maxWidth:s.width+'ch'} as React.CSSProperties}>
@@ -201,11 +212,12 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
      <div className="nav"><button className="btn" disabled={ci===0} onClick={()=>go(ci-1)}>Bab sebelumnya</button><button className="btn" disabled={ci>=total-1} onClick={()=>go(ci+1)}>Bab berikutnya</button></div></>:<p className="muted">Memuat bab…</p>}</article></div>}
   {ui&&<div className="ovt">
    <header><span className="ttl">{cur.title}</span><button className="btn sm xbtn" aria-label="Tutup menu" onClick={()=>{setUi(false);setPanel('')}}>✕</button>
-    <div className="hrow"><button className="btn sm" onClick={close}>Kembali</button><button className="btn sm" onClick={()=>setPanel(panel==='toc'?'':'toc')}>Isi</button><button className="btn sm" onClick={()=>setPanel(panel==='cari'?'':'cari')}>Cari</button><button className="btn sm" onClick={()=>setPanel(panel==='tanda'?'':'tanda')}>Tanda{bms.length?` (${bms.length})`:''}</button><button className="btn sm" onClick={()=>setPanel(panel==='tampil'?'':'tampil')}>Tampilan</button><button className="btn sm" onClick={()=>setPanel(panel==='api'?'':'api')}>Terjemah</button></div></header>
+    <div className="hrow"><button className="btn sm" onClick={close}>Kembali</button><button className="btn sm" onClick={()=>setPanel(panel==='toc'?'':'toc')}>Isi</button>{!scanImg&&<button className="btn sm" onClick={()=>setPanel(panel==='cari'?'':'cari')}>Cari</button>}{!scanImg&&<button className="btn sm" onClick={()=>setPanel(panel==='tanda'?'':'tanda')}>Tanda{bms.length?` (${bms.length})`:''}</button>}<button className="btn sm" onClick={()=>setPanel(panel==='tampil'?'':'tampil')}>Tampilan</button>{!scanImg&&<button className="btn sm" onClick={()=>setPanel(panel==='api'?'':'api')}>Terjemah</button>}</div></header>
   {panel==='toc'&&<div className="panel">{cur.toc.map((t,i)=><button key={i} className={'row'+(i===ci?' on':'')} onClick={()=>go(i)}><span className="num">{i+1}.</span> {t}</button>)}</div>}
   {panel==='tampil'&&<div className="panel">
    <div className="chips">{THEMES.map(([k,l])=><button key={k} className={'btn sm'+(s.theme===k?' on':'')} onClick={()=>upd('theme',k)}>{l}</button>)}</div>
-   <label><span>Teks rata kiri-kanan (justify)</span><input type="checkbox" checked={s.just} onChange={e=>upd('just',e.target.checked)}/></label>
+   {cur.scan&&cur.ranges&&<label><span>PDF pindaian: tampilkan teks hasil OCR (lambat)</span><input type="checkbox" checked={s.scanText} onChange={e=>{const on=e.target.checked;upd('scanText',on);if(on)setCi(chOfPage(sp));else setSp(cur.ranges?.[ci]?.[0]??0)}}/></label>}
+    <label><span>Teks rata kiri-kanan (justify)</span><input type="checkbox" checked={s.just} onChange={e=>upd('just',e.target.checked)}/></label>
     <label><span>Tombol putar kecil di layar</span><input type="checkbox" checked={s.mini} onChange={e=>upd('mini',e.target.checked)}/></label>
     <label>Mode baca <select value={s.view} onChange={e=>upd('view',e.target.value)}><option value="page">Halaman (geser)</option><option value="scroll">Gulir</option></select></label>
    <label>Huruf <select value={s.font} onChange={e=>upd('font',e.target.value)}><option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option></select></label>
@@ -224,7 +236,10 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
    <div className="bk"><b>Terjemahkan seluruh buku</b><button className="btn sm" onClick={()=>void doBook()}>{bprog?`Batal (bab ${bprog[0]+1}/${bprog[1]}, paragraf ${bprog[2]}/${bprog[3]})`:'Hitung dan mulai'}</button><small className="muted">Bisa dihentikan lalu dilanjutkan; paragraf yang sudah diterjemahkan tidak diulang.</small></div>
    {cur.scan&&<div className="bk"><b>OCR seluruh buku</b><button className="btn sm" onClick={()=>void ocrBook()}>{ocrAll?`Berhenti (bab ${ocrAll[0]}/${ocrAll[1]})`:'Mulai OCR'}</button><small className="muted">Bab yang dibuka otomatis di-OCR; ini untuk memproses semuanya sekaligus.</small></div>}</div>}
   </div>}
-  {ui&&<footer className="ovb">
+  {ui&&scanImg&&<footer className="ovb scanbar"><button className="btn sm" disabled={sp<=0} onClick={()=>gotoPage(sp-1)}>‹ Sebelumnya</button>
+   <label className="pgjump">Hal. <input type="number" min="1" max={cur.pages??1} value={sp+1} onChange={e=>gotoPage((+e.target.value||1)-1)}/> / {cur.pages}</label>
+   <button className="btn sm" disabled={sp>=(cur.pages??1)-1} onClick={()=>gotoPage(sp+1)}>Berikutnya ›</button><button className="btn sm" onClick={()=>setZoom(z=>z>1?1:2.4)}>{zoom>1?'Perkecil':'Perbesar'}</button></footer>}
+  {ui&&!scanImg&&<footer className="ovb">
    <select value={mode} onChange={e=>setMode(e.target.value as Mode)}><option value="asli">Teks asli</option><option value="terjemah">Terjemahan</option><option value="dua">Asli + terjemahan</option></select>
    {prog?<button className="btn sm" onClick={()=>ac.current?.abort()}>Batal {prog[0]}/{prog[1]}</button>
     :<button className="btn sm" onClick={()=>void doTr()}>Terjemahkan bab ({prov.id.toUpperCase()}, {ch?estimate(ch):0} karakter)</button>}
@@ -233,6 +248,6 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
    <button className="btn sm" onClick={()=>void mark()}>Tandai</button>
    <label className="rate">Kecepatan {rate}<input type="range" min="0.6" max="1.6" step="0.1" value={rate} onChange={e=>setRate(+e.target.value)}/></label>
   </footer>}
-  {s.mini&&!ui&&<div className="mini">{playing<0?<button aria-label="Bacakan" onClick={play}>▶</button>:<><button aria-label={paused?'Lanjut':'Jeda'} onClick={()=>{if(paused){resume()}else{pause()};setPaused(!paused)}}>{paused?'▶':'❚❚'}</button><button aria-label="Berhenti" onClick={()=>{stop();setPlaying(-1)}}>■</button></>}</div>}
+  {s.mini&&!ui&&!scanImg&&<div className="mini">{playing<0?<button aria-label="Bacakan" onClick={play}>▶</button>:<><button aria-label={paused?'Lanjut':'Jeda'} onClick={()=>{if(paused){resume()}else{pause()};setPaused(!paused)}}>{paused?'▶':'❚❚'}</button><button aria-label="Berhenti" onClick={()=>{stop();setPlaying(-1)}}>■</button></>}</div>}
   {hint&&!ui&&<div className="hint">Sentuh sudut atas kiri dan kanan layar bersamaan dengan dua jari untuk membuka menu</div>}</div>)
 }

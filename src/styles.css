@@ -54,3 +54,8 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 .ttl2{background:none;border:0;padding:0;text-align:left;font-weight:600;font-size:1.05rem;line-height:1.3;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .bar{height:3px;background:var(--ln);border-radius:2px;margin-top:auto}.bar i{display:block;height:100%;background:var(--ac);border-radius:2px}
 .acts{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+
+.scan{position:absolute;inset:0;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg);touch-action:pan-x pan-y}
+.scan img{display:block}.scan.z{overflow:auto;align-items:flex-start;justify-content:flex-start}
+.scanbar{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:center;padding:.5rem}
+.pgjump{display:flex;align-items:center;gap:.3rem;font-size:.85rem}.pgjump input{width:4.2rem;text-align:center}

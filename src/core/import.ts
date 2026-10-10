@@ -3,7 +3,7 @@ import {parseFb2} from './fb2'
 import {parsePdf} from './pdf'
 import {parseMobi} from './mobi'
 import type {Chapter,ImgEntry} from './model'
-type R={title:string;author:string;chapters:Chapter[];images?:ImgEntry[];cover?:string;file?:ArrayBuffer;scan?:boolean}
+type R={title:string;author:string;chapters:Chapter[];images?:ImgEntry[];cover?:string;file?:ArrayBuffer;scan?:boolean;pages?:number;ranges?:[number,number][]}
 const norm=(buf:ArrayBuffer,format:string,r:R)=>({buf,format,size:buf.byteLength,images:[] as ImgEntry[],cover:'',file:undefined as ArrayBuffer|undefined,scan:false,...r})
 // Format dikenali dari ekstensi; jika tidak ada ekstensi (mis. dibuka dari pengelola berkas Android), dari isi berkas.
 export async function importBuffer(buf:ArrayBuffer,name=''){

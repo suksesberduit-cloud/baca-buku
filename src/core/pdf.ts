@@ -28,6 +28,7 @@ function cap(bounds:Bound[],max:number){const out:Bound[]=[]
  for(const b of bounds){if(b.to-b.from+1<=max){out.push(b);continue}
   for(let f=b.from;f<=b.to;f+=max){const t=Math.min(b.to,f+max-1);out.push({title:b.title?`${b.title} (hlm. ${f+1}–${t+1})`:'',from:f,to:t})}}
  return out}
+export async function scanRanges(doc:any){return cap(await getBounds(doc,doc.numPages),12).map(x=>({title:x.title||range(x.from,x.to),from:x.from,to:x.to}))}
 export async function parsePdf(buf:ArrayBuffer,name=''){
  const doc=await openPdf(buf)
  try{
@@ -44,9 +45,9 @@ export async function parsePdf(buf:ArrayBuffer,name=''){
   const images:ImgEntry[]=jpg?[['pdf/cover',jpg]]:[];const cover=jpg?'pdf/cover':''
   const chars=pages.reduce((a,p)=>a+p.items.reduce((b,i)=>b+i.s.length,0),0)
   if(chars<Math.max(50,n*15)){ // PDF pindaian: bab menunggu OCR
-   const chapters:Chapter[]=cap(await getBounds(doc,n),12).map((b,ci)=>({id:String(ci),title:b.title||range(b.from,b.to),
+   const rs=await scanRanges(doc);const chapters:Chapter[]=rs.map((b,ci)=>({id:String(ci),title:b.title,
     blocks:[{id:`${ci}-0`,kind:'paragraph' as const,text:'Halaman ini belum dibaca (OCR). Mohon tunggu…',hash:'ocr'}],ocr:{from:b.from,to:b.to}}))
-   return{title:base||String(md?.info?.Title??'').trim()||'Tanpa judul',author,chapters,images,cover,file:buf.slice(0),scan:true}}
+   return{title:base||String(md?.info?.Title??'').trim()||'Tanpa judul',author,chapters,images,cover,file:buf.slice(0),scan:true,pages:n,ranges:rs.map(x=>[x.from,x.to] as [number,number])}}
   const paras=pdfToParas(pages);const chapters:Chapter[]=[]
   for(const b of await getBounds(doc,n)){
    const ps=paras.filter(p=>p.page>=b.from&&p.page<=b.to);if(!ps.length)continue
