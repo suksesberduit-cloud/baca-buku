@@ -59,3 +59,8 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 .scan img{display:block}.scan.z{overflow:auto;align-items:flex-start;justify-content:flex-start}
 .scanbar{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:center;padding:.5rem}
 .pgjump{display:flex;align-items:center;gap:.3rem;font-size:.85rem}.pgjump input{width:4.2rem;text-align:center}
+
+.scan{position:absolute;inset:0;display:block;overflow:hidden;touch-action:none;background:#fff}
+.scanin{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+.scanmsg{position:absolute;top:45%;width:100%;text-align:center;margin:0}
+.pind{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;border-radius:999px;padding:.25em .8em;font-size:.75rem;pointer-events:none}

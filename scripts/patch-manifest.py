@@ -2,7 +2,7 @@
 # Tiga filter: (1) berdasarkan tipe MIME (termasuk application/octet-stream yang dikirim banyak pengelola berkas untuk
 # ekstensi yang tidak dikenal Android seperti .fb2/.azw3), (2) berdasarkan ekstensi pada nama berkas dengan tipe */*,
 # (3) berdasarkan ekstensi tanpa tipe sama sekali (intent yang hanya membawa URI).
-import sys
+import sys,os
 p='android/app/src/main/AndroidManifest.xml'
 t=open(p,encoding='utf-8').read()
 if 'application/epub+zip' in t: print('Manifest sudah berisi filter berkas.');sys.exit(0)
@@ -22,6 +22,12 @@ for ext in ('epub','fb2','pdf','mobi','azw3','azw','kf8'):
 PP=''.join(f'<data android:pathPattern="{x}"/>' for x in pats)
 f2='<intent-filter>'+V+S+'<data android:host="*"/><data android:mimeType="*/*"/>'+PP+'</intent-filter>\n'
 f3='<intent-filter>'+V+S+'<data android:host="*"/>'+PP+'</intent-filter>\n'
+# Filter luas: agar Baca Buku PASTI muncul untuk FB2/AZW3 berapa pun tipe yang dikirim pengelola berkas (konsekuensi: muncul juga untuk jenis berkas lain).
+# Matikan dengan BROAD_OPEN=0 di workflow apk.yml.
+broad=''
+if os.environ.get('BROAD_OPEN','1')!='0':
+    broad=('<intent-filter>'+V+S+'<data android:mimeType="*/*"/></intent-filter>\n'
+           +'<intent-filter>'+V+S+'</intent-filter>\n')
 if '</activity>' not in t: sys.exit('AndroidManifest tidak memiliki </activity>')
-open(p,'w',encoding='utf-8').write(t.replace('</activity>',f1+f2+f3+'</activity>',1))
-print('Filter EPUB/FB2/PDF/MOBI/AZW3 ditambahkan (3 intent-filter).')
+open(p,'w',encoding='utf-8').write(t.replace('</activity>',f1+f2+f3+broad+'</activity>',1))
+print('Filter EPUB/FB2/PDF/MOBI/AZW3 ditambahkan (3 intent-filter + filter luas jika BROAD_OPEN!=0).')

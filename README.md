@@ -53,3 +53,6 @@ PDF pindaian sekarang dibuka sebagai halaman gambar (cepat, tanpa OCR dan tanpa 
 
 ## Buka dengan (semua format)
 `scripts/patch-manifest.py` memasang 3 intent-filter: tipe MIME (termasuk application/octet-stream untuk .fb2/.azw3 yang tidak dikenal Android), ekstensi dengan tipe */*, dan ekstensi tanpa tipe. Mencakup EPUB, FB2, PDF (teks dan pindaian), MOBI, AZW, AZW3. Format dideteksi dari isi berkas bila URI tidak memuat nama. Tidak didaftarkan untuk semua tipe berkas (*/* tanpa batasan) agar tidak muncul di setiap jenis berkas.
+
+## Penampil PDF pindaian (halaman gambar)
+Halaman dirender ke canvas dengan cache dan prefetch (2 depan, 1 belakang) agar pindah halaman instan; cubit dua jari untuk zoom, geser untuk menggeser, ketuk dua kali untuk zoom; margin kosong dipotong otomatis (bisa dimatikan) dan latar mengikuti warna kertas; mengikuti rotasi layar (potret/lanskap). Status bar disembunyikan dengan WebView menempati layar penuh. Filter "Buka dengan" luas aktif secara bawaan (BROAD_OPEN=1 di apk.yml; set 0 untuk mematikan).
