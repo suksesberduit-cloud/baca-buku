@@ -56,3 +56,6 @@ PDF pindaian sekarang dibuka sebagai halaman gambar (cepat, tanpa OCR dan tanpa 
 
 ## Penampil PDF pindaian (halaman gambar)
 Halaman dirender ke canvas dengan cache dan prefetch (2 depan, 1 belakang) agar pindah halaman instan; cubit dua jari untuk zoom, geser untuk menggeser, ketuk dua kali untuk zoom; margin kosong dipotong otomatis (bisa dimatikan) dan latar mengikuti warna kertas; mengikuti rotasi layar (potret/lanskap). Status bar disembunyikan dengan WebView menempati layar penuh. Filter "Buka dengan" luas aktif secara bawaan (BROAD_OPEN=1 di apk.yml; set 0 untuk mematikan).
+
+## Bagikan ke Baca Buku, impor banyak berkas
+Jika pengelola berkas menolak membuka ekstensi yang tidak dikenal (mis. .fb2/.azw3: "Tidak dapat membuka file"), pilih berkas lalu tombol Bagikan > Baca Buku. `scripts/patch-manifest.py` menambah filter ACTION_SEND dan mengganti MainActivity agar berkas yang dibagikan diteruskan ke aplikasi seperti "Buka dengan". Tombol Impor buku sekarang bisa memilih banyak berkas sekaligus dan tidak lagi memfilter ekstensi.

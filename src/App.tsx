@@ -117,7 +117,7 @@ const lastUri=useRef('')
    const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined,scan:p.scan||undefined,format:p.format,size:p.size,pages:p.pages,ranges:p.ranges}
    await saveBook(b,p.chapters,p.images,p.file);setBooks(await listBooks());return b
   }catch(e){alert(errMsg(e));return null}finally{setBusy(false)}}
- async function onFile(f?:File){if(f)await ingest(await f.arrayBuffer(),f.name)}
+ async function onFiles(fl:File[]){for(const f of fl)await ingest(await f.arrayBuffer(),f.name)}
  async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');setUi(false);setPage(0)
   const p=await kvGet<{ci:number;y?:number;bid?:string;sp?:number}>('pos:'+b.id);pendY.current=p?.y??0;setSp(p?.sp??0);setZoom(1);pendBlock.current=p?.bid??'';pendLast.current=false
   setCh(null);setCi(p?.ci??0);setCur(b);setMode('asli');setHint(true);window.setTimeout(()=>setHint(false),6500)
@@ -178,7 +178,7 @@ const lastUri=useRef('')
  dimRef.current=dim;viewRef.current=s.view
  backRef.current=()=>{if(panel){setPanel('');return true}if(ui){setUi(false);return true}if(cur){close();return true}return false}
  if(!cur)return(<div className="lib"><h1>Baca Buku</h1>
-  <label className="btn big">{busy?'Mengimpor…':'Impor buku (EPUB, FB2, PDF, MOBI, AZW3)'}<input type="file" accept=".epub,.fb2,.pdf,.mobi,.azw3,.azw,application/epub+zip,application/x-fictionbook+xml,application/pdf" hidden onChange={e=>{void onFile(e.target.files?.[0]);e.target.value=''}}/></label>
+  <label className="btn big">{busy?'Mengimpor…':'Impor buku (EPUB, FB2, PDF, MOBI, AZW3)'}<input type="file" multiple hidden onChange={e=>{const fl=Array.from(e.target.files??[]) as File[];e.target.value='';void onFiles(fl)}}/></label>
   {books.length===0&&<p className="muted">Belum ada buku. Impor berkas EPUB, FB2, PDF, MOBI, atau AZW3 dari penyimpanan HP untuk mulai membaca.</p>}
   {books.length>0&&<input className="srch" placeholder="Cari judul atau penulis" value={filter} onChange={e=>setFilter(e.target.value)}/>}
   {(()=>{const lb=books.find(b=>b.id===last);return lb&&!filter?<button className="btn big" onClick={()=>void open(lb)}>Lanjutkan: {lb.title}{pg[lb.id]!==undefined?` (bab ${pg[lb.id]+1}/${lb.toc.length})`:''}</button>:null})()}
