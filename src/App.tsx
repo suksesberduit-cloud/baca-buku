@@ -9,6 +9,7 @@ import ScanView from './ScanView'
 import {getPdfDoc} from './core/pdfdoc'
 import {scanRanges} from './core/pdf'
 import {saveText,readUri} from './core/files'
+import {hyph} from './core/hyph'
 import {mock,translateChapter,loadTr,estimate,bookTodo,translateBook,translateBlock} from './core/translate'
 import type {TranslationProvider} from './core/translate'
 import ApiPanel from './ApiPanel'
@@ -24,7 +25,7 @@ import type {Cfg} from './providers/config'
 import {speak,stop,pause,resume,hasVoice} from './core/tts'
 type Mode='asli'|'terjemah'|'dua'
 interface S{theme:string;size:number;lh:number;gap:number;font:string;width:number;auto:boolean;view:'page'|'scroll';mini:boolean;just:boolean;scanText:boolean;crop:boolean}
-const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.9,font:'serif',width:40,auto:false,view:'page',mini:true,just:true,scanText:false,crop:true}
+const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.35,font:'serif',width:40,auto:false,view:'page',mini:true,just:true,scanText:false,crop:true}
 const PX=20,PY=28
 const fmtSize=(n:number)=>n>=1048576?(n/1048576).toFixed(n>=10485760?0:1).replace('.',',')+' MB':Math.max(1,Math.round(n/1024))+' kB'
 const uriName=(url:string)=>{let s=url.split(/[?#]/)[0].split('/').pop()??'';try{s=decodeURIComponent(s)}catch{/* biarkan */};const nm=s.split(/[/:]/).pop()??'';return /\.[a-z0-9]{2,5}$/i.test(nm)?nm:''}
@@ -46,7 +47,7 @@ export default function App(){
  const[ui,setUi]=useState(false);const[hint,setHint]=useState(false);const[dim,setDim]=useState({w:0,h:0});const[page,setPage]=useState(0);const[pages,setPages]=useState(1);const[tick,setTick]=useState(0)
  const wrap=useRef<HTMLDivElement>(null),art=useRef<HTMLElement>(null),dimRef=useRef({w:0,h:0}),viewRef=useRef<'page'|'scroll'>('page'),sw=useRef({x:0,y:0,t:0,multi:false})
  const ac=useRef<AbortController|null>(null),main=useRef<HTMLDivElement>(null),pendY=useRef(0),ready=useRef(false),tm=useRef(0)
- useEffect(()=>{void navigator.storage?.persist?.();listBooks().then(setBooks);kvGet<S>('settings').then(v=>{if(v)setS({...DEF,...v});ready.current=true});kvGet<Cfg>('cfg').then(c=>{if(c){setCfg(c);void buildProvider(c).then(setProv)}})},[])
+ useEffect(()=>{void navigator.storage?.persist?.();listBooks().then(setBooks);kvGet<S>('settings').then(v=>{if(v)setS({...DEF,...v,gap:v.gap===0.9?DEF.gap:v.gap});ready.current=true});kvGet<Cfg>('cfg').then(c=>{if(c){setCfg(c);void buildProvider(c).then(setProv)}})},[])
  useEffect(()=>{document.documentElement.dataset.theme=s.theme;if(ready.current)void kvSet('settings',s)},[s])
  useEffect(()=>{if(!cur)return;if(cur.scan&&cur.ranges&&!s.scanText){setCh(null);return};let dead=false
   loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id));if(c.ocr)void queueOcr(c);else if(autoRef.current&&!bprog)void doTr(c,true)
@@ -197,12 +198,13 @@ const lastUri=useRef('')
   <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, daftar isi lengkap</p></div>)
  const total=cur.toc.length
 const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap+'em'} as React.CSSProperties
+ const H=(x:string,l:'en'|'id',kind:string)=>s.just&&kind!=='heading'?hyph(x,l):x
  const blocksEl=ch?ch.blocks.map((k,i)=>{const t=tr[k.id];const Tag=k.kind==='heading'?'h2':k.kind==='quote'?'blockquote':'p'
   if(k.kind==='image')return<div id={'b'+k.id} key={k.id} className="img"><Img book={cur.id} path={k.src??''} alt={k.text} onLoad={()=>setTick(n=>n+1)}/></div>
   return<div id={'b'+k.id} key={k.id} onClick={()=>void tapBlock(k)} className={(playing===i||hit===k.id?'hl':'')+(bms.some(m=>m.id===k.id)?' bm':'')}>
-   {(mode!=='terjemah'||!t)&&<Tag lang="en" className={mode==='terjemah'?'blm':''}>{k.text}</Tag>}
-   {mode!=='asli'&&t&&<Tag lang="id" className={mode==='dua'?'tr':''}>{t}</Tag>}
-   {mode==='asli'&&rev[k.id]&&t&&<Tag lang="id" className="tr">{t}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>}):null
+   {(mode!=='terjemah'||!t)&&<Tag lang="en" className={mode==='terjemah'?'blm':''}>{H(k.text,'en',k.kind)}</Tag>}
+   {mode!=='asli'&&t&&<Tag lang="id" className={mode==='dua'?'tr':''}>{H(t,'id',k.kind)}</Tag>}
+   {mode==='asli'&&rev[k.id]&&t&&<Tag lang="id" className="tr">{H(t,'id',k.kind)}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>}):null
  return(<div className="rd" onTouchStart={onTS} onTouchEnd={onTE}>
   {scanImg&&cur?<ScanView bookId={cur.id} page={sp} pages={cur.pages??1} crop={s.crop} onZoom={z=>setZoom(z)} api={scanApi}/>:s.view==='page'?<div className="pgwrap" ref={wrap}>
     <article ref={art} className={'pg'+(s.just?' just':'')} style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>

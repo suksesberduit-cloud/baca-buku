@@ -59,3 +59,6 @@ Halaman dirender ke canvas dengan cache dan prefetch (2 depan, 1 belakang) agar 
 
 ## Bagikan ke Baca Buku, impor banyak berkas
 Jika pengelola berkas menolak membuka ekstensi yang tidak dikenal (mis. .fb2/.azw3: "Tidak dapat membuka file"), pilih berkas lalu tombol Bagikan > Baca Buku. `scripts/patch-manifest.py` menambah filter ACTION_SEND dan mengganti MainActivity agar berkas yang dibagikan diteruskan ke aplikasi seperti "Buka dengan". Tombol Impor buku sekarang bisa memilih banyak berkas sekaligus dan tidak lagi memfilter ekstensi.
+
+## Tata letak justify rapi
+Teks rata kiri-kanan memakai spasi kata normal (word-spacing 0), letter-spacing 0, indentasi baris pertama, jarak paragraf rapat (bawaan 0,35em), dan pemenggalan kata. WebView/Chrome Android tidak punya kamus pemenggalan bahasa Indonesia, jadi teks terjemahan dipenggal per suku kata oleh `src/core/hyph.ts` (soft hyphen disisipkan hanya saat tampil, teks asli tidak berubah); bahasa Inggris memakai CSS hyphens:auto. Terukur di Chrome 131 pada kolom 300 px: celah antarkata terlebar turun dari 4,36x menjadi 0,77x.

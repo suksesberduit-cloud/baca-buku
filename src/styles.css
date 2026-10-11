@@ -64,3 +64,8 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 .scanin{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
 .scanmsg{position:absolute;top:45%;width:100%;text-align:center;margin:0}
 .pind{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;border-radius:999px;padding:.25em .8em;font-size:.75rem;pointer-events:none}
+
+/* Tata letak justify rapi ala ReadEra: spasi kata normal, tanpa letter-spacing, pemenggalan kata, indentasi baris pertama */
+.just p,.just blockquote{text-align:justify;text-justify:inter-word;hyphens:auto;-webkit-hyphens:auto;hyphenate-limit-chars:6 3 3;letter-spacing:0;word-spacing:0;text-wrap:pretty;font-kerning:normal;overflow-wrap:break-word}
+.just p{text-indent:1.4em}
+.just div:has(>h2)+div>p{text-indent:0}
