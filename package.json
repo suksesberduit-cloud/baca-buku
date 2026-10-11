@@ -28,7 +28,10 @@
   "@capacitor/status-bar": "^6.0.0",
   "pdfjs-dist": "3.11.174",
   "@lingo-reader/mobi-parser": "0.4.1",
-  "tesseract.js": "5.1.1"
+  "tesseract.js": "5.1.1",
+  "@fontsource/lexend": "^5.0.0",
+  "@fontsource/lato": "^5.0.0",
+  "@fontsource/quicksand": "^5.0.0"
  },
  "devDependencies": {
   "@types/react": "^18.3.3",

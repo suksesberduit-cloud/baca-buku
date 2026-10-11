@@ -62,3 +62,6 @@ Jika pengelola berkas menolak membuka ekstensi yang tidak dikenal (mis. .fb2/.az
 
 ## Tata letak justify rapi
 Teks rata kiri-kanan memakai spasi kata normal (word-spacing 0), letter-spacing 0, indentasi baris pertama, jarak paragraf rapat (bawaan 0,35em), dan pemenggalan kata. WebView/Chrome Android tidak punya kamus pemenggalan bahasa Indonesia, jadi teks terjemahan dipenggal per suku kata oleh `src/core/hyph.ts` (soft hyphen disisipkan hanya saat tampil, teks asli tidak berubah); bahasa Inggris memakai CSS hyphens:auto. Terukur di Chrome 131 pada kolom 300 px: celah antarkata terlebar turun dari 4,36x menjadi 0,77x.
+
+## Pemenggalan kata Inggris dan font
+Bahasa Inggris dipenggal dengan algoritma Liang dan pola hyphen.tex dari TeX (src/core/hyph-en-data.ts, atribusi di berkas); bahasa Indonesia dengan aturan suku kata. Soft hyphen disisipkan hanya saat tampil dan CSS memakai hyphens:manual agar konsisten di semua perangkat. Font bawaan tambahan: Lexend, Lato, Quicksand Medium (500) dari paket @fontsource (lisensi OFL, dibundel, offline). Font pribadi (.ttf/.otf/.woff/.woff2) bisa diimpor di Tampilan; disimpan di perangkat, tidak ikut ekspor cadangan.

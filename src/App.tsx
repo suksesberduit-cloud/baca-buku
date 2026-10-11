@@ -29,7 +29,10 @@ const DEF:S={theme:'sepia',size:19,lh:1.7,gap:0.35,font:'serif',width:40,auto:fa
 const PX=20,PY=28
 const fmtSize=(n:number)=>n>=1048576?(n/1048576).toFixed(n>=10485760?0:1).replace('.',',')+' MB':Math.max(1,Math.round(n/1024))+' kB'
 const uriName=(url:string)=>{let s=url.split(/[?#]/)[0].split('/').pop()??'';try{s=decodeURIComponent(s)}catch{/* biarkan */};const nm=s.split(/[/:]/).pop()??'';return /\.[a-z0-9]{2,5}$/i.test(nm)?nm:''}
-const FONTS:Record<string,string>={serif:'Georgia,"Noto Serif",serif',sans:'system-ui,Roboto,sans-serif',mono:'ui-monospace,Menlo,monospace'}
+const FONTS:Record<string,string>={serif:'Georgia,"Noto Serif",serif',sans:'system-ui,Roboto,sans-serif',mono:'ui-monospace,Menlo,monospace',lexend:"'Lexend',system-ui,sans-serif",lato:"'Lato',system-ui,sans-serif",quicksand:"'Quicksand',system-ui,sans-serif"}
+interface CF{id:string;name:string;data:ArrayBuffer}
+const famOf=(f:string)=>FONTS[f]??(f.startsWith('c:')?`'bbfont-${f.slice(2)}',serif`:FONTS.serif)
+const regFont=async(f:CF)=>{const ff=new FontFace('bbfont-'+f.id,f.data);await ff.load();document.fonts.add(ff)}
 const THEMES:[string,string][]=[['putih','Putih'],['sepia','Sepia'],['abu','Abu-abu'],['gelap','Gelap'],['hitam','Hitam OLED']]
 const errMsg=(e:unknown)=>e instanceof DOMException&&e.name==='QuotaExceededError'?'Penyimpanan perangkat penuh. Hapus buku atau data lain, lalu coba lagi.':e instanceof Error?e.message:String(e)
 export default function App(){
@@ -90,6 +93,15 @@ const lastUri=useRef('')
  const scanImg=!!cur?.scan&&!!cur.ranges&&!s.scanText
  const chOfPage=(p:number)=>{const i=(cur?.ranges??[]).findIndex(x=>p>=x[0]&&p<=x[1]);return i<0?0:i}
  function gotoPage(n:number){const t=Math.max(0,Math.min((cur?.pages??1)-1,n));setSp(t);setZoom(1);if(cur)void kvSet('pos:'+cur.id,{ci:chOfPage(t),sp:t})}
+ const[cfonts,setCfonts]=useState<{id:string;name:string}[]>([])
+ useEffect(()=>{void kvGet<CF[]>('fonts').then(async l=>{for(const f of l??[]){try{await regFont(f)}catch{/* font rusak dilewati */}};setCfonts((l??[]).map(f=>({id:f.id,name:f.name})))})},[])
+ async function addFont(fl:File[]){for(const file of fl){try{
+   const data=await file.arrayBuffer();const id=Date.now().toString(36)+Math.random().toString(36).slice(2,5)
+   const f:CF={id,name:file.name.replace(/\.[^.]+$/,''),data};await regFont(f)
+   const list=[...((await kvGet<CF[]>('fonts'))??[]),f];await kvSet('fonts',list);setCfonts(list.map(x=>({id:x.id,name:x.name})));upd('font','c:'+id)
+  }catch(e){alert('Font tidak valid atau tidak didukung: '+errMsg(e))}}}
+ async function delFont(){if(!s.font.startsWith('c:'))return;const id=s.font.slice(2)
+  const list=((await kvGet<CF[]>('fonts'))??[]).filter(x=>x.id!==id);await kvSet('fonts',list);setCfonts(list.map(x=>({id:x.id,name:x.name})));upd('font','serif')}
  function queueOcr(c:Chapter,show=true):Promise<boolean>{
   const b=cur;if(!b||!c.ocr)return Promise.resolve(true)
   const key=b.id+':'+c.id;if(ocrBusy.current.has(key))return Promise.resolve(true)
@@ -197,7 +209,7 @@ const lastUri=useRef('')
   <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p>
   <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, daftar isi lengkap</p></div>)
  const total=cur.toc.length
-const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap+'em'} as React.CSSProperties
+const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.font==='quicksand'?500:undefined,'--gap':s.gap+'em'} as React.CSSProperties
  const H=(x:string,l:'en'|'id',kind:string)=>s.just&&kind!=='heading'?hyph(x,l):x
  const blocksEl=ch?ch.blocks.map((k,i)=>{const t=tr[k.id];const Tag=k.kind==='heading'?'h2':k.kind==='quote'?'blockquote':'p'
   if(k.kind==='image')return<div id={'b'+k.id} key={k.id} className="img"><Img book={cur.id} path={k.src??''} alt={k.text} onLoad={()=>setTick(n=>n+1)}/></div>
@@ -223,7 +235,8 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:FONTS[s.font],'--gap':s.gap
     <label><span>Teks rata kiri-kanan (justify)</span><input type="checkbox" checked={s.just} onChange={e=>upd('just',e.target.checked)}/></label>
     <label><span>Tombol putar kecil di layar</span><input type="checkbox" checked={s.mini} onChange={e=>upd('mini',e.target.checked)}/></label>
     <label>Mode baca <select value={s.view} onChange={e=>upd('view',e.target.value)}><option value="page">Halaman (geser)</option><option value="scroll">Gulir</option></select></label>
-   <label>Huruf <select value={s.font} onChange={e=>upd('font',e.target.value)}><option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option></select></label>
+   <label>Huruf <select value={s.font} onChange={e=>upd('font',e.target.value)}><option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option><option value="lexend">Lexend</option><option value="lato">Lato</option><option value="quicksand">Quicksand Medium (500)</option>{cfonts.map(f=><option key={f.id} value={'c:'+f.id}>{f.name}</option>)}</select></label>
+    <div className="chips"><label className="btn sm">Impor font (.ttf/.otf/.woff2)<input type="file" multiple hidden onChange={e=>{const fl=Array.from(e.target.files??[]) as File[];e.target.value='';void addFont(fl)}}/></label>{s.font.startsWith('c:')&&<button className="btn sm" onClick={()=>void delFont()}>Hapus font ini</button>}</div>
    <label>Ukuran {s.size}<input type="range" min="14" max="30" value={s.size} onChange={e=>upd('size',+e.target.value)}/></label>
    <label>Tinggi baris {s.lh}<input type="range" min="1.2" max="2.4" step="0.1" value={s.lh} onChange={e=>upd('lh',+e.target.value)}/></label>
    <label>Jarak paragraf {s.gap}<input type="range" min="0" max="2" step="0.1" value={s.gap} onChange={e=>upd('gap',+e.target.value)}/></label>
