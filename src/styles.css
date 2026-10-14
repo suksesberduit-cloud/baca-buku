@@ -71,3 +71,15 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 .just div:has(>h2)+div>p{text-indent:0}
 
 .just p,.just blockquote{hyphens:manual;-webkit-hyphens:manual}
+
+/* Bar progres baca */
+.prog{flex:1 1 100%;display:flex;flex-direction:column;gap:.25rem;padding:.1rem .1rem .3rem}
+.plab{text-align:center;font-size:.85rem}
+.prow{display:flex;align-items:center;gap:.5rem}
+.prog input[type=range]{flex:1;min-width:0;height:2rem;margin:0;padding:0;border:0;background:transparent;accent-color:var(--ac);touch-action:none}
+.pline{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--ln);pointer-events:none}.pline i{display:block;height:100%;background:var(--ac)}
+
+/* Bar progres melayang (muncul dengan dua jari di bawah, hilang otomatis) */
+.pbfloat{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--bg);box-shadow:0 -2px 14px rgba(0,0,0,.4);padding:.6rem .8rem 1.4rem;animation:pbin .18s ease-out}
+@keyframes pbin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.pnumb{pointer-events:auto;display:inline-block;padding:.5rem 1.2rem}

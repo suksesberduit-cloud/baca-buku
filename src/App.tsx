@@ -6,6 +6,9 @@ import {importBuffer} from './core/import'
 import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBook,putChapter} from './core/db'
 import {ocrChapter} from './core/ocr'
 import ScanView from './ScanView'
+import ProgressBar from './ProgressBar'
+import {chapterLens} from './core/lens'
+import {layout,position,locate} from './core/progress'
 import {getPdfDoc} from './core/pdfdoc'
 import {scanRanges} from './core/pdf'
 import {saveText,readUri} from './core/files'
@@ -54,7 +57,7 @@ export default function App(){
  useEffect(()=>{document.documentElement.dataset.theme=s.theme;if(ready.current)void kvSet('settings',s)},[s])
  useEffect(()=>{if(!cur)return;if(cur.scan&&cur.ranges&&!s.scanText){setCh(null);return};let dead=false
   loadChapter(cur.id,ci).then(async c=>{if(dead||!c)return;setCh(c);setTr(await loadTr(cur.id,c,prov.id));if(c.ocr)void queueOcr(c);else if(autoRef.current&&!bprog)void doTr(c,true)
-   requestAnimationFrame(()=>{if(viewRef.current==='scroll'){if(pendBlock.current)document.getElementById('b'+pendBlock.current)?.scrollIntoView({block:'center'});else if(main.current)main.current.scrollTop=pendY.current;pendBlock.current=''};pendY.current=0})})
+   requestAnimationFrame(()=>{if(viewRef.current==='scroll'){if(pendBlock.current)document.getElementById('b'+pendBlock.current)?.scrollIntoView({block:'center'});else if(pendF.current>=0&&main.current){const f=pendF.current;main.current.scrollTop=f*Math.max(0,main.current.scrollHeight-main.current.clientHeight);setSf(f);pendF.current=-1}else if(main.current)main.current.scrollTop=pendY.current;pendBlock.current=''};pendY.current=0})})
   return()=>{dead=true}},[cur,ci,prov,s.scanText])
  useEffect(()=>{void navigator.storage?.estimate?.().then(e=>setStor(`Penyimpanan terpakai: ${((e.usage??0)/1048576).toFixed(1)} MB dari kuota sekitar ${((e.quota??0)/1073741824).toFixed(1)} GB.`))},[books])
  useEffect(()=>{void (async()=>{const o:Record<string,number>={};for(const b of books){const p=await kvGet<{ci:number}>('pos:'+b.id);if(p)o[b.id]=p.ci};setPg(o);setLast((await kvGet<string>('last'))??'')})()},[books,cur])
@@ -67,6 +70,7 @@ useEffect(()=>{const el=wrap.current;if(!el||!cur||s.view!=='page')return
   const target=pendBlock.current?document.getElementById('b'+pendBlock.current):null
   if(target){setPage(Math.min(n-1,Math.max(0,Math.floor((target.offsetLeft+2)/dim.w))));pendBlock.current=''}
   else if(pendLast.current&&changed){setPage(n-1);pendLast.current=false}
+  else if(changed&&pendF.current>=0){setPage(Math.min(n-1,Math.max(0,Math.round(pendF.current*(n-1)))));pendF.current=-1}
   else if(changed)setPage(0)
   else setPage(p=>Math.min(p,n-1))},[ch,tr,rev,mode,dim,s.size,s.lh,s.gap,s.font,s.view,tick,busyB,cur])
  useEffect(()=>{if(!cur||!ch||s.view!=='page'||!dim.w)return;const k=firstVisible();if(!k)return
@@ -75,6 +79,26 @@ const lastUri=useRef('')
  const[ocrP,setOcrP]=useState<[number,number]|null>(null);const[ocrAll,setOcrAll]=useState<[number,number]|null>(null)
  const ciRef=useRef(0),ocrQ=useRef<Promise<unknown>>(Promise.resolve()),ocrStop=useRef(false),ocrBusy=useRef(new Set<string>()),scanRef=useRef(false),scanApi=useRef<{zoom:(f:number)=>void}|null>(null)
  const[sp,setSp]=useState(0);const[zoom,setZoom]=useState(1)
+ const[lens,setLens]=useState<number[]|null>(null);const[cpp,setCpp]=useState(0);const[sf,setSf]=useState(0)
+ const pendF=useRef(-1),cal=useRef<{key:string;m:Map<number,[number,number]>}>({key:'',m:new Map()})
+ useEffect(()=>{setLens(null);if(!cur)return;let dead=false
+  if(cur.scan&&cur.ranges){setLens(cur.ranges.map(r=>r[1]-r[0]+1));return}
+  chapterLens(cur).then(l=>{if(!dead)setLens(l)}).catch(()=>undefined)
+  return()=>{dead=true}},[cur?.id,cur?.toc.length,cur?.ranges?.length])
+ useEffect(()=>{if(!cur||!lens||s.view!=='page'||mode!=='asli'||!dim.w||(cur.scan&&cur.ranges)||!ch||Number(ch.id)!==ci)return
+  const key=[cur.id,s.size,s.lh,s.gap,s.font,s.just,dim.w,dim.h].join('|')
+  if(cal.current.key!==key)cal.current={key,m:new Map()}
+  if(pages>=3&&lens[ci]>0){cal.current.m.set(ci,[lens[ci],pages]);let c=0,p=0;cal.current.m.forEach(([a,b])=>{c+=a;p+=b});setCpp(c/p)}
+ },[cur,lens,ch,s.view,s.size,s.lh,s.gap,s.font,s.just,dim,mode,ci,pages])
+ const[pb,setPb]=useState(false);const pbT=useRef(0),pbDown=useRef(false)
+ const pbArm=()=>{clearTimeout(pbT.current);if(pbDown.current)return;pbT.current=window.setTimeout(()=>setPb(false),4500)}
+ const pbHold=()=>{pbDown.current=true;clearTimeout(pbT.current)}
+ const pbRel=()=>{pbDown.current=false;pbArm()}
+ const pbShow=()=>{pbDown.current=false;setPb(true);pbArm()}
+ useEffect(()=>()=>clearTimeout(pbT.current),[])
+ useEffect(()=>{if(ui)setPb(false)},[ui])
+ useEffect(()=>{setPb(false)},[cur?.id])
+ useEffect(()=>{if(!ui||s.view!=='scroll'||!main.current)return;const m=main.current,mx=m.scrollHeight-m.clientHeight;setSf(mx>0?m.scrollTop/mx:0)},[ui,s.view])
  useEffect(()=>{if(!Capacitor.isNativePlatform())return
   const handle=async(url:string)=>{if(!url||url===lastUri.current)return;lastUri.current=url
    try{const buf=await readUri(url);const b=await ingest(buf,uriName(url));if(b)await open(b)}
@@ -131,8 +155,8 @@ const lastUri=useRef('')
    await saveBook(b,p.chapters,p.images,p.file);setBooks(await listBooks());return b
   }catch(e){alert(errMsg(e));return null}finally{setBusy(false)}}
  async function onFiles(fl:File[]){for(const f of fl)await ingest(await f.arrayBuffer(),f.name)}
- async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');setUi(false);setPage(0)
-  const p=await kvGet<{ci:number;y?:number;bid?:string;sp?:number}>('pos:'+b.id);pendY.current=p?.y??0;setSp(p?.sp??0);setZoom(1);pendBlock.current=p?.bid??'';pendLast.current=false
+ async function open(b:Book){void kvSet('last',b.id);setBms(await getBms(b.id));setHits(null);setQ('');setHit('');setUi(false);setPage(0);setSf(0)
+  const p=await kvGet<{ci:number;y?:number;bid?:string;sp?:number}>('pos:'+b.id);pendY.current=p?.y??0;setSp(p?.sp??0);setZoom(1);pendBlock.current=p?.bid??'';pendLast.current=false;pendF.current=-1
   setCh(null);setCi(p?.ci??0);setCur(b);setMode('asli');setHint(true);window.setTimeout(()=>setHint(false),6500)
   if(Capacitor.isNativePlatform())void StatusBar.setOverlaysWebView({overlay:true}).then(()=>StatusBar.hide()).catch(()=>undefined)
   if(b.scan){if(!b.ranges)void backfill(b)}else void refreshToc(b)}
@@ -142,8 +166,8 @@ const lastUri=useRef('')
  async function refreshToc(b:Book){const t:string[]=[];for(let i=0;i<b.toc.length;i++){const c=await loadChapter(b.id,i);t.push(c&&!c.ocr?chapterTitle(c.blocks)||b.toc[i]:b.toc[i])}
   if(t.some((x,i)=>x!==b.toc[i])){const nb={...b,toc:t};await putBook(nb);setCur(c=>c&&c.id===nb.id?nb:c);setBooks(await listBooks())}}
  function close(){stop();setPlaying(-1);ac.current?.abort();setCur(null);setCh(null);setPanel('');setUi(false);if(Capacitor.isNativePlatform())void StatusBar.show().then(()=>StatusBar.setOverlaysWebView({overlay:false})).catch(()=>undefined)}
- function go(n:number){if(!cur||n<0||n>=cur.toc.length)return;if(scanImg&&cur.ranges){gotoPage(cur.ranges[n][0]);setPanel('');setUi(false);return}stop();if(!bprog)ac.current?.abort();setNote('');setPlaying(-1);pendY.current=0;pendBlock.current='';setCi(n);setPanel('');setUi(false);void kvSet('pos:'+cur.id,{ci:n,y:0})}
- function onScroll(){if(!cur)return;clearTimeout(tm.current);const y=main.current?.scrollTop??0;tm.current=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci,y}),400)}
+ function go(n:number,keep=false){if(!cur||n<0||n>=cur.toc.length)return;if(scanImg&&cur.ranges){gotoPage(cur.ranges[n][0]);setPanel('');setUi(false);return}stop();if(!bprog)ac.current?.abort();setNote('');setPlaying(-1);pendY.current=0;pendBlock.current='';setSf(0);setCi(n);if(!keep){setPanel('');setUi(false)};void kvSet('pos:'+cur.id,{ci:n,y:0})}
+ function onScroll(){if(!cur)return;clearTimeout(tm.current);const y=main.current?.scrollTop??0;tm.current=window.setTimeout(()=>{void kvSet('pos:'+cur.id,{ci,y});const m=main.current;if(m){const mx=m.scrollHeight-m.clientHeight;setSf(mx>0?m.scrollTop/mx:0)}},400)}
  async function doTr(c:Chapter|null=ch,auto=false){if(!cur||!c)return;if(c.ocr){if(!auto)alert('Bab ini belum selesai di-OCR. Tunggu sampai teksnya muncul.');return}const a=new AbortController();ac.current=a;setProg([0,c.blocks.filter(k=>k.kind!=='image').length])
   try{await translateChapter(cur.id,c,prov,(d,t)=>setProg([d,t]),a.signal)}catch(e){if(!a.signal.aborted){if(auto)setNote(errMsg(e));else alert(errMsg(e))}}
   const r=await loadTr(cur.id,c,prov.id);setTr(o=>({...o,...r}));setProg(null);if(!auto)setMode(m=>m==='asli'?'terjemah':m)}
@@ -156,7 +180,7 @@ const lastUri=useRef('')
   speak(texts,useTr?'id-ID':'en-US',rate,i=>{setPlaying(idx[i]);reveal(ch.blocks[idx[i]].id,true)},()=>setPlaying(-1))}
  function jump(n:number,id:string){stop();setPlaying(-1);setHit(id);setPanel('');setUi(false)
   if(n===ci)reveal(id)
-  else if(cur){if(!bprog)ac.current?.abort();pendBlock.current=id;pendY.current=0;setCi(n);void kvSet('pos:'+cur.id,{ci:n,y:0})}}
+  else if(cur){if(!bprog)ac.current?.abort();pendF.current=-1;pendBlock.current=id;pendY.current=0;setCi(n);void kvSet('pos:'+cur.id,{ci:n,y:0})}}
  async function doSearch(){if(!cur)return;setSearching(true);try{setHits(await searchBook(cur,q,mode==='asli'?null:prov.id))}finally{setSearching(false)}}
  async function mark(){if(!cur||!ch)return;const k=firstVisible();if(!k)return
   setBms(await addBm(cur.id,{id:k.id,ci,snip:k.text.slice(0,90),at:Date.now()}))}
@@ -178,6 +202,7 @@ const lastUri=useRef('')
  function onTS(e:React.TouchEvent){const t=e.touches
   if(t.length>=2){sw.current.multi=true;const H=window.innerHeight,W=window.innerWidth,a=t[0],b=t[1]
    if(a.clientY<H*0.2&&b.clientY<H*0.2&&Math.min(a.clientX,b.clientX)<W*0.4&&Math.max(a.clientX,b.clientX)>W*0.6){if(ui){setUi(false);setPanel('')}else setUi(true)}
+   else if(a.clientY>H*0.8&&b.clientY>H*0.8&&Math.min(a.clientX,b.clientX)<W*0.4&&Math.max(a.clientX,b.clientX)>W*0.6){if(pb)setPb(false);else if(!ui)pbShow()}
    return}
   sw.current={x:t[0].clientX,y:t[0].clientY,t:Date.now(),multi:false}}
  function onTE(e:React.TouchEvent){
@@ -189,7 +214,7 @@ const lastUri=useRef('')
  const upd=(k:keyof S,v:string|number|boolean)=>setS(o=>({...o,[k]:v}))
  autoRef.current=s.auto;ciRef.current=ci;scanRef.current=scanImg
  dimRef.current=dim;viewRef.current=s.view
- backRef.current=()=>{if(panel){setPanel('');return true}if(ui){setUi(false);return true}if(cur){close();return true}return false}
+ backRef.current=()=>{if(pb){setPb(false);return true}if(panel){setPanel('');return true}if(ui){setUi(false);return true}if(cur){close();return true}return false}
  if(!cur)return(<div className="lib"><h1>Baca Buku</h1>
   <label className="btn big">{busy?'Mengimpor…':'Impor buku (EPUB, FB2, PDF, MOBI, AZW3)'}<input type="file" multiple hidden onChange={e=>{const fl=Array.from(e.target.files??[]) as File[];e.target.value='';void onFiles(fl)}}/></label>
   {books.length===0&&<p className="muted">Belum ada buku. Impor berkas EPUB, FB2, PDF, MOBI, atau AZW3 dari penyimpanan HP untuk mulai membaca.</p>}
@@ -207,8 +232,19 @@ const lastUri=useRef('')
    <label className="btn sm">Impor cadangan<input type="file" accept=".json,application/json" hidden onChange={e=>{void doImport(e.target.files?.[0]);e.target.value=''}}/></label></div>
    <small className="muted">Ringan: terjemahan, posisi baca, penanda, pengaturan. Setelah dipulihkan, impor ulang berkas EPUB yang sama agar buku muncul. Penuh: termasuk teks buku. Kunci API tidak pernah ikut diekspor. {stor}</small></div>
   <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p>
-  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, daftar isi lengkap</p></div>)
+  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah)</p></div>)
  const total=cur.toc.length
+ const fixedL=!!cur.scan&&!!cur.ranges
+ const cppE=cpp>0?cpp:(dim.w?Math.max(300,Math.floor((dim.w-2*PX)/(s.size*0.5)*((dim.h-2*PY)/(s.size*s.lh))*0.85)):1800)
+ const actual=!fixedL&&s.view==='page'&&mode==='asli'&&!!ch&&Number(ch.id)===ci?pages:undefined
+ const lay=lens&&lens.length===total?layout(lens,cppE,ci,actual,fixedL):null
+ const loadingCh=!!ch&&Number(ch.id)!==ci
+ const frac=loadingCh?Math.max(0,pendF.current):s.view==='page'?(pages>1?page/(pages-1):0):sf
+ const bpos=lay?position(lay,ci,frac):0
+ function gotoGlobal(v:number){if(!lay||!cur)return;const t=locate(lay,v)
+  if(t.ci===ci){if(s.view==='page')setPage(Math.round(t.frac*(pages-1)));else if(main.current){const m=main.current;m.scrollTop=t.frac*Math.max(0,m.scrollHeight-m.clientHeight);setSf(t.frac)};return}
+  pendF.current=t.frac;go(t.ci,true)}
+ function liveGlobal(v:number){if(!lay||s.view!=='page')return;const t=locate(lay,v);if(t.ci===ci)setPage(Math.round(t.frac*(pages-1)))}
 const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.font==='quicksand'?500:undefined,'--gap':s.gap+'em'} as React.CSSProperties
  const H=(x:string,l:'en'|'id',kind:string)=>s.just&&kind!=='heading'?hyph(x,l):x
  const blocksEl=ch?ch.blocks.map((k,i)=>{const t=tr[k.id];const Tag=k.kind==='heading'?'h2':k.kind==='quote'?'blockquote':'p'
@@ -220,7 +256,8 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.
  return(<div className="rd" onTouchStart={onTS} onTouchEnd={onTE}>
   {scanImg&&cur?<ScanView bookId={cur.id} page={sp} pages={cur.pages??1} crop={s.crop} onZoom={z=>setZoom(z)} api={scanApi}/>:s.view==='page'?<div className="pgwrap" ref={wrap}>
     <article ref={art} className={'pg'+(s.just?' just':'')} style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>
-    <div className="pnum">{page+1}/{pages} · Bab {ci+1} dari {total}{note?' · '+note:''}{ocrP?` · OCR ${ocrP[0]}/${ocrP[1]} hlm`:''}</div></div>
+    {lay&&<div className="pline"><i style={{width:(bpos/Math.max(1,lay.total)*100)+'%'}}/></div>}
+    <div className="pnum"><span className="pnumb" onClick={pbShow}>{lay?`Hal. ${bpos.toLocaleString('id-ID')} / ${fixedL?'':'~'}${lay.total.toLocaleString('id-ID')} · Bab ${ci+1}/${total}`:`${page+1}/${pages} · Bab ${ci+1} dari ${total}`}{note?' · '+note:''}{ocrP?` · OCR ${ocrP[0]}/${ocrP[1]} hlm`:''}</span></div></div>
   :<div className="main" ref={main} onScroll={onScroll}><article className={s.just?'just':''} style={{...fs,maxWidth:s.width+'ch'} as React.CSSProperties}>
     {ch?<><small className="muted">Bab {ci+1} dari {total}{mode==='asli'?' · ketuk paragraf untuk terjemahan':''}</small>{note&&<small className="muted"> · {note}</small>}{ocrP&&<small className="muted"> · OCR {ocrP[0]}/{ocrP[1]} hlm</small>}{blocksEl}
      <div className="nav"><button className="btn" disabled={ci===0} onClick={()=>go(ci-1)}>Bab sebelumnya</button><button className="btn" disabled={ci>=total-1} onClick={()=>go(ci+1)}>Bab berikutnya</button></div></>:<p className="muted">Memuat bab…</p>}</article></div>}
@@ -252,10 +289,11 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.
    <div className="bk"><b>Terjemahkan seluruh buku</b><button className="btn sm" onClick={()=>void doBook()}>{bprog?`Batal (bab ${bprog[0]+1}/${bprog[1]}, paragraf ${bprog[2]}/${bprog[3]})`:'Hitung dan mulai'}</button><small className="muted">Bisa dihentikan lalu dilanjutkan; paragraf yang sudah diterjemahkan tidak diulang.</small></div>
    {cur.scan&&<div className="bk"><b>OCR seluruh buku</b><button className="btn sm" onClick={()=>void ocrBook()}>{ocrAll?`Berhenti (bab ${ocrAll[0]}/${ocrAll[1]})`:'Mulai OCR'}</button><small className="muted">Bab yang dibuka otomatis di-OCR; ini untuk memproses semuanya sekaligus.</small></div>}</div>}
   </div>}
-  {ui&&scanImg&&<footer className="ovb scanbar"><button className="btn sm" disabled={sp<=0} onClick={()=>gotoPage(sp-1)}>‹ Sebelumnya</button>
+  {ui&&scanImg&&<footer className="ovb scanbar"><ProgressBar value={sp+1} total={cur.pages??1} onCommit={v=>gotoPage(v-1)}/><button className="btn sm" disabled={sp<=0} onClick={()=>gotoPage(sp-1)}>‹ Sebelumnya</button>
    <label className="pgjump">Hal. <input type="number" min="1" max={cur.pages??1} value={sp+1} onChange={e=>gotoPage((+e.target.value||1)-1)}/> / {cur.pages}</label>
    <button className="btn sm" disabled={sp>=(cur.pages??1)-1} onClick={()=>gotoPage(sp+1)}>Berikutnya ›</button><button className="btn sm" onClick={()=>scanApi.current?.zoom(1/1.6)}>−</button><button className="btn sm" onClick={()=>scanApi.current?.zoom(1.6)}>+</button></footer>}
   {ui&&!scanImg&&<footer className="ovb">
+   {lay?<ProgressBar value={bpos} total={lay.total} approx={!fixedL} sub={`Bab ${ci+1}/${total}`} onLive={liveGlobal} onCommit={gotoGlobal}/>:<small className="muted" style={{flex:'1 1 100%',textAlign:'center'}}>Menghitung halaman buku…</small>}
    <select value={mode} onChange={e=>setMode(e.target.value as Mode)}><option value="asli">Teks asli</option><option value="terjemah">Terjemahan</option><option value="dua">Asli + terjemahan</option></select>
    {prog?<button className="btn sm" onClick={()=>ac.current?.abort()}>Batal {prog[0]}/{prog[1]}</button>
     :<button className="btn sm" onClick={()=>void doTr()}>Terjemahkan bab ({prov.id.toUpperCase()}, {ch?estimate(ch):0} karakter)</button>}
@@ -265,5 +303,7 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.
    <label className="rate">Kecepatan {rate}<input type="range" min="0.6" max="1.6" step="0.1" value={rate} onChange={e=>setRate(+e.target.value)}/></label>
   </footer>}
   {s.mini&&!ui&&!scanImg&&<div className="mini">{playing<0?<button aria-label="Bacakan" onClick={play}>▶</button>:<><button aria-label={paused?'Lanjut':'Jeda'} onClick={()=>{if(paused){resume()}else{pause()};setPaused(!paused)}}>{paused?'▶':'❚❚'}</button><button aria-label="Berhenti" onClick={()=>{stop();setPlaying(-1)}}>■</button></>}</div>}
-  {hint&&!ui&&<div className="hint">Sentuh sudut atas kiri dan kanan layar bersamaan dengan dua jari untuk membuka menu</div>}</div>)
+  {pb&&!ui&&(scanImg?<div className="pbfloat"><ProgressBar value={sp+1} total={cur.pages??1} onAct={a=>{if(a)pbHold();else pbRel()}} onCommit={v=>{pbArm();gotoPage(v-1)}}/></div>
+   :lay?<div className="pbfloat"><ProgressBar value={bpos} total={lay.total} approx={!fixedL} sub={`Bab ${ci+1}/${total}`} onAct={a=>{if(a)pbHold();else pbRel()}} onLive={v=>{pbArm();liveGlobal(v)}} onCommit={v=>{pbArm();gotoGlobal(v)}}/></div>:null)}
+  {hint&&!ui&&!pb&&<div className="hint">Dua jari di sudut atas kiri+kanan: menu. Dua jari di bawah kiri+kanan (atau ketuk angka halaman): bar progres</div>}</div>)
 }

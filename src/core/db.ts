@@ -29,7 +29,7 @@ const fromB64=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)).buffer as 
 export async function dump(full:boolean):Promise<Dump>{
  const d=await P()
  const pairs=async(s:'tr'|'kv'|'chapters'):Promise<[string,unknown][]>=>{const ks=await d.getAllKeys(s);const vs=await d.getAll(s);return ks.map((k,i)=>[String(k),vs[i]])}
- const o:Dump={v:1,app:'bacabuku',full,tr:await pairs('tr'),kv:(await pairs('kv')).filter(([k])=>k!=='fonts')}
+ const o:Dump={v:1,app:'bacabuku',full,tr:await pairs('tr'),kv:(await pairs('kv')).filter(([k])=>k!=='fonts'&&!k.startsWith('len:'))}
  if(full){o.books=await d.getAll('books');o.chapters=(await pairs('chapters')) as [string,Chapter][]
   const ks=await d.getAllKeys('images'),vs=await d.getAll('images') as {type:string;data:ArrayBuffer}[]
   o.images=ks.map((k,i)=>[String(k),{type:vs[i].type,b64:toB64(vs[i].data)}])}
