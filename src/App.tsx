@@ -7,6 +7,7 @@ import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBo
 import {ocrChapter} from './core/ocr'
 import ScanView from './ScanView'
 import ProgressBar from './ProgressBar'
+import {offsetRange,setMark} from './core/follow'
 import {chapterLens} from './core/lens'
 import {layout,position,locate} from './core/progress'
 import {getPdfDoc} from './core/pdfdoc'
@@ -79,6 +80,7 @@ const lastUri=useRef('')
  const[ocrP,setOcrP]=useState<[number,number]|null>(null);const[ocrAll,setOcrAll]=useState<[number,number]|null>(null)
  const ciRef=useRef(0),ocrQ=useRef<Promise<unknown>>(Promise.resolve()),ocrStop=useRef(false),ocrBusy=useRef(new Set<string>()),scanRef=useRef(false),scanApi=useRef<{zoom:(f:number)=>void}|null>(null)
  const[sp,setSp]=useState(0);const[zoom,setZoom]=useState(1)
+ const userAt=useRef(0),flipT=useRef(0)
  const[lens,setLens]=useState<number[]|null>(null);const[cpp,setCpp]=useState(0);const[sf,setSf]=useState(0)
  const pendF=useRef(-1),cal=useRef<{key:string;m:Map<number,[number,number]>}>({key:'',m:new Map()})
  useEffect(()=>{setLens(null);if(!cur)return;let dead=false
@@ -97,6 +99,7 @@ const lastUri=useRef('')
  const pbShow=()=>{pbDown.current=false;setPb(true);pbArm()}
  useEffect(()=>()=>clearTimeout(pbT.current),[])
  useEffect(()=>{if(ui)setPb(false)},[ui])
+ useEffect(()=>{if(playing<0){clearTimeout(flipT.current);setMark(null)}},[playing])
  useEffect(()=>{setPb(false)},[cur?.id])
  useEffect(()=>{if(!ui||s.view!=='scroll'||!main.current)return;const m=main.current,mx=m.scrollHeight-m.clientHeight;setSf(mx>0?m.scrollTop/mx:0)},[ui,s.view])
  useEffect(()=>{if(!Capacitor.isNativePlatform())return
@@ -177,7 +180,7 @@ const lastUri=useRef('')
   if(!texts.length)return alert('Belum ada terjemahan untuk dibacakan.')
   if(useTr&&!(await hasVoice('id')))alert('Suara Bahasa Indonesia belum terpasang. Pasang lewat Pengaturan Android › Output text-to-speech.')
   setPaused(false)
-  speak(texts,useTr?'id-ID':'en-US',rate,i=>{setPlaying(idx[i]);reveal(ch.blocks[idx[i]].id,true)},()=>setPlaying(-1))}
+  speak(texts,useTr?'id-ID':'en-US',rate,(i,a,b)=>{setPlaying(idx[i]);markSentence(ch.blocks[idx[i]].id,useTr,a,b)},()=>setPlaying(-1))}
  function jump(n:number,id:string){stop();setPlaying(-1);setHit(id);setPanel('');setUi(false)
   if(n===ci)reveal(id)
   else if(cur){if(!bprog)ac.current?.abort();pendF.current=-1;pendBlock.current=id;pendY.current=0;setCi(n);void kvSet('pos:'+cur.id,{ci:n,y:0})}}
@@ -194,12 +197,28 @@ const lastUri=useRef('')
   if(viewRef.current==='page'){const x=page*dimRef.current.w-1;return ch.blocks.find(b=>{const e=document.getElementById('b'+b.id);return !!e&&e.offsetLeft>=x})}
   const top=main.current?.getBoundingClientRect().top??0
   return ch.blocks.find(b=>{const e=document.getElementById('b'+b.id);return !!e&&e.getBoundingClientRect().bottom>top+8})}
+ function markSentence(bid:string,useTr:boolean,a:number,b:number){
+  clearTimeout(flipT.current)
+  const el=document.getElementById('b'+bid);if(!el)return
+  const host=el.querySelector(useTr?'[lang=id]':'[lang=en]');const r=host?offsetRange(host,a,b):null
+  if(!r){setMark(null);if(Date.now()-userAt.current>4000)reveal(bid,true);return}
+  setMark(r)
+  if(Date.now()-userAt.current<4000)return // user sedang membaca/menggulir sendiri: jangan direbut
+  const rs=Array.from(r.getClientRects());const rc=rs[0]??r.getBoundingClientRect()
+  if(viewRef.current==='page'){const op=el.offsetParent as HTMLElement|null;const w=dimRef.current.w;if(!op||!w)return
+   const ox=op.getBoundingClientRect().left,pg=(x:DOMRect)=>Math.max(0,Math.floor((x.left-ox+1)/w))
+   const p0=pg(rc),p1=rs.length?pg(rs[rs.length-1]):p0
+   setPage(p0)
+   // kalimat terbelah di batas halaman: pindah ke halaman berikut kira-kira saat suara sampai di baris itu
+   if(p1>p0){const on0=rs.filter(x=>pg(x)===p0).length;flipT.current=window.setTimeout(()=>setPage(p1),Math.max(400,(b-a)/(14*rate)*1000*on0/rs.length))}}
+  else{const m=main.current;if(!m)return;const mr=m.getBoundingClientRect()
+   if(rc.top<mr.top+mr.height*0.1||rc.bottom>mr.bottom-mr.height*0.3)m.scrollTo({top:m.scrollTop+(rc.top-mr.top)-mr.height*0.25,behavior:'smooth'})}}
  function reveal(id:string,smooth=false){const el=document.getElementById('b'+id);if(!el)return
   if(viewRef.current==='page'){if(dimRef.current.w)setPage(Math.max(0,Math.floor((el.offsetLeft+2)/dimRef.current.w)))}
   else el.scrollIntoView({block:'center',behavior:smooth?'smooth':'auto'})}
  function nextPage(){if(scanImg){gotoPage(sp+1);return}if(page<pages-1)setPage(page+1);else if(cur&&ci<cur.toc.length-1)go(ci+1)}
  function prevPage(){if(scanImg){gotoPage(sp-1);return}if(page>0)setPage(page-1);else if(ci>0){pendLast.current=true;go(ci-1)}}
- function onTS(e:React.TouchEvent){const t=e.touches
+ function onTS(e:React.TouchEvent){userAt.current=Date.now();const t=e.touches
   if(t.length>=2){sw.current.multi=true;const H=window.innerHeight,W=window.innerWidth,a=t[0],b=t[1]
    if(a.clientY<H*0.2&&b.clientY<H*0.2&&Math.min(a.clientX,b.clientX)<W*0.4&&Math.max(a.clientX,b.clientX)>W*0.6){if(ui){setUi(false);setPanel('')}else setUi(true)}
    else if(a.clientY>H*0.8&&b.clientY>H*0.8&&Math.min(a.clientX,b.clientX)<W*0.4&&Math.max(a.clientX,b.clientX)>W*0.6){if(pb)setPb(false);else if(!ui)pbShow()}
@@ -232,7 +251,7 @@ const lastUri=useRef('')
    <label className="btn sm">Impor cadangan<input type="file" accept=".json,application/json" hidden onChange={e=>{void doImport(e.target.files?.[0]);e.target.value=''}}/></label></div>
    <small className="muted">Ringan: terjemahan, posisi baca, penanda, pengaturan. Setelah dipulihkan, impor ulang berkas EPUB yang sama agar buku muncul. Penuh: termasuk teks buku. Kunci API tidak pernah ikut diekspor. {stor}</small></div>
   <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p>
-  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah)</p></div>)
+  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah), suara dibaca per kalimat dengan penanda</p></div>)
  const total=cur.toc.length
  const fixedL=!!cur.scan&&!!cur.ranges
  const cppE=cpp>0?cpp:(dim.w?Math.max(300,Math.floor((dim.w-2*PX)/(s.size*0.5)*((dim.h-2*PY)/(s.size*s.lh))*0.85)):1800)
