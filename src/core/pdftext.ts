@@ -59,3 +59,12 @@ export function mergeAcross(out:Para[]):Para[]{
   else merged.push({...q})}
  return merged
 }
+/** PDF bertext: satu bab per rentang halaman (selaras dengan ranges mode halaman-gambar). Teks dipakai untuk pencarian dan mode teks. */
+export async function textChapters(paras:Para[],rs:{title:string;from:number;to:number}[],hash:(t:string)=>Promise<string>){
+ const out:{id:string;title:string;blocks:{id:string;kind:'heading'|'paragraph';text:string;hash:string;pg:number}[]}[]=[]
+ for(let ci=0;ci<rs.length;ci++){const r=rs[ci];const blocks:{id:string;kind:'heading'|'paragraph';text:string;hash:string;pg:number}[]=[]
+  for(const p of paras)if(p.page>=r.from&&p.page<=r.to)blocks.push({id:`${ci}-${blocks.length}`,kind:p.kind,text:p.text,hash:await hash(p.text),pg:p.page})
+  if(!blocks.length)blocks.push({id:`${ci}-0`,kind:'paragraph',text:'(Halaman ini tidak berisi teks.)',hash:'kosong',pg:r.from})
+  out.push({id:String(ci),title:r.title,blocks})}
+ return out
+}

@@ -87,3 +87,7 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 /* Penanda kalimat yang sedang dibacakan (TTS) */
 ::highlight(tts){background-color:rgba(224,180,90,.4);color:var(--fg)}
 @supports (background:color-mix(in srgb,red 50%,transparent)){::highlight(tts){background-color:color-mix(in srgb,var(--ac) 38%,transparent)}}
+
+/* PDF mode gulir (semua halaman dari sampul sampai akhir) */
+.sscroll{position:absolute;inset:0;overflow-y:auto;background:var(--bg);overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.sslot{background:rgba(128,128,128,.14);overflow:hidden}

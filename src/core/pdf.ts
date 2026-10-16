@@ -1,9 +1,9 @@
 import {sha} from './epub'
-import {pdfToParas} from './pdftext'
+import {pdfToParas,textChapters} from './pdftext'
 import {pageJpeg} from './pdfrender'
 import type {PageT} from './pdftext'
-import type {Block,Chapter,ImgEntry} from './model'
-// PDF lewat pdf.js. PDF bertext dibaca langsung; PDF pindaian (gambar) dibuat sebagai buku dengan bab "menunggu OCR" (lihat ocr.ts).
+import type {Chapter,ImgEntry} from './model'
+// PDF lewat pdf.js. Semua PDF dibuka sebagai halaman-per-halaman (gambar). PDF pindaian: bab "menunggu OCR" (lihat ocr.ts); PDF bertext: bab berisi teks aslinya (untuk pencarian dan mode teks opsional).
 export async function openPdf(data:ArrayBuffer):Promise<any>{
  const pdfjs:any=await import('pdfjs-dist')
  pdfjs.GlobalWorkerOptions.workerSrc=(await import('pdfjs-dist/build/pdf.worker.min.js?url')).default
@@ -48,14 +48,10 @@ export async function parsePdf(buf:ArrayBuffer,name=''){
    const rs=await scanRanges(doc);const chapters:Chapter[]=rs.map((b,ci)=>({id:String(ci),title:b.title,
     blocks:[{id:`${ci}-0`,kind:'paragraph' as const,text:'Halaman ini belum dibaca (OCR). Mohon tunggu…',hash:'ocr'}],ocr:{from:b.from,to:b.to}}))
    return{title:base||String(md?.info?.Title??'').trim()||'Tanpa judul',author,chapters,images,cover,file:buf.slice(0),scan:true,pages:n,ranges:rs.map(x=>[x.from,x.to] as [number,number])}}
-  const paras=pdfToParas(pages);const chapters:Chapter[]=[]
-  for(const b of await getBounds(doc,n)){
-   const ps=paras.filter(p=>p.page>=b.from&&p.page<=b.to);if(!ps.length)continue
-   const ci=chapters.length;const blocks:Block[]=[]
-   for(const p of ps)blocks.push({id:`${ci}-${blocks.length}`,kind:p.kind,text:p.text,hash:await sha(p.text)})
-   chapters.push({id:String(ci),title:b.title||range(b.from,b.to),blocks})}
-  if(!chapters.length)throw new Error('Tidak ada teks yang bisa dibaca di PDF ini.')
+  const paras=pdfToParas(pages);const rs=await scanRanges(doc)
+  const chapters:Chapter[]=await textChapters(paras,rs,sha)
   const title=base||String(md?.info?.Title??'').trim()||chapters.flatMap(c=>c.blocks).find(b=>b.kind==='heading')?.text||'Tanpa judul'
-  return{title,author,chapters,images,cover}
+  // scan:true = tampil halaman-per-halaman seperti PDF OCR; tl = PDF punya text layer (tanpa OCR)
+  return{title,author,chapters,images,cover,file:buf.slice(0),scan:true,tl:true,pages:n,ranges:rs.map(x=>[x.from,x.to] as [number,number])}
  }finally{try{await doc.destroy()}catch{/* abaikan */}}
 }

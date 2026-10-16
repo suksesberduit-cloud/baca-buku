@@ -7,6 +7,7 @@ import {listBooks,saveBook,loadChapter,deleteBook,kvGet,kvSet,dump,restore,putBo
 import {ocrChapter} from './core/ocr'
 import ScanView from './ScanView'
 import ProgressBar from './ProgressBar'
+import ScanScroll from './ScanScroll'
 import {offsetRange,setMark} from './core/follow'
 import {chapterLens} from './core/lens'
 import {layout,position,locate} from './core/progress'
@@ -80,7 +81,7 @@ const lastUri=useRef('')
  const[ocrP,setOcrP]=useState<[number,number]|null>(null);const[ocrAll,setOcrAll]=useState<[number,number]|null>(null)
  const ciRef=useRef(0),ocrQ=useRef<Promise<unknown>>(Promise.resolve()),ocrStop=useRef(false),ocrBusy=useRef(new Set<string>()),scanRef=useRef(false),scanApi=useRef<{zoom:(f:number)=>void}|null>(null)
  const[sp,setSp]=useState(0);const[zoom,setZoom]=useState(1)
- const userAt=useRef(0),flipT=useRef(0)
+ const userAt=useRef(0),flipT=useRef(0),spT=useRef(0)
  const[lens,setLens]=useState<number[]|null>(null);const[cpp,setCpp]=useState(0);const[sf,setSf]=useState(0)
  const pendF=useRef(-1),cal=useRef<{key:string;m:Map<number,[number,number]>}>({key:'',m:new Map()})
  useEffect(()=>{setLens(null);if(!cur)return;let dead=false
@@ -154,7 +155,7 @@ const lastUri=useRef('')
  async function ingest(buf:ArrayBuffer,name:string):Promise<Book|null>{
   setBusy(true)
   try{const p=await importBuffer(buf,name);const id=await sha(p.buf)
-   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined,scan:p.scan||undefined,format:p.format,size:p.size,pages:p.pages,ranges:p.ranges}
+   const b:Book={id,title:p.title,author:p.author,toc:p.chapters.map(c=>c.title),addedAt:Date.now(),cover:p.cover||undefined,scan:p.scan||undefined,tl:p.tl||undefined,format:p.format,size:p.size,pages:p.pages,ranges:p.ranges}
    await saveBook(b,p.chapters,p.images,p.file);setBooks(await listBooks());return b
   }catch(e){alert(errMsg(e));return null}finally{setBusy(false)}}
  async function onFiles(fl:File[]){for(const f of fl)await ingest(await f.arrayBuffer(),f.name)}
@@ -182,6 +183,7 @@ const lastUri=useRef('')
   setPaused(false)
   speak(texts,useTr?'id-ID':'en-US',rate,(i,a,b)=>{setPlaying(idx[i]);markSentence(ch.blocks[idx[i]].id,useTr,a,b)},()=>setPlaying(-1))}
  function jump(n:number,id:string){stop();setPlaying(-1);setHit(id);setPanel('');setUi(false)
+  if(scanImg&&cur?.ranges){const b=cur;void loadChapter(b.id,n).then(c=>gotoPage(c?.blocks.find(x=>x.id===id)?.pg??b.ranges?.[n]?.[0]??0));return}
   if(n===ci)reveal(id)
   else if(cur){if(!bprog)ac.current?.abort();pendF.current=-1;pendBlock.current=id;pendY.current=0;setCi(n);void kvSet('pos:'+cur.id,{ci:n,y:0})}}
  async function doSearch(){if(!cur)return;setSearching(true);try{setHits(await searchBook(cur,q,mode==='asli'?null:prov.id))}finally{setSearching(false)}}
@@ -226,7 +228,7 @@ const lastUri=useRef('')
   sw.current={x:t[0].clientX,y:t[0].clientY,t:Date.now(),multi:false}}
  function onTE(e:React.TouchEvent){
   if(sw.current.multi){if(e.touches.length===0)sw.current.multi=false;return}
-  if(scanImg&&zoom>1)return
+  if(scanImg&&(zoom>1||viewRef.current==='scroll'))return
   if(!scanImg&&viewRef.current!=='page')return
   const c=e.changedTouches[0],dx=c.clientX-sw.current.x,dy=c.clientY-sw.current.y
   if(Math.abs(dx)>60&&Math.abs(dx)>1.6*Math.abs(dy)&&Date.now()-sw.current.t<900){if(dx<0)nextPage();else prevPage()}}
@@ -243,7 +245,7 @@ const lastUri=useRef('')
    return<div className="card" key={b.id}>
     <button className="cvr" onClick={()=>void open(b)} aria-label={b.title}>{b.cover?<Img book={b.id} path={b.cover} alt="" cls="cvimg"/>:<span className="cvph">{b.title.slice(0,1)}</span>}</button>
     <div className="meta"><button className="ttl2" onClick={()=>void open(b)}>{b.title}</button>
-     <small className="muted">{[b.format,b.size?fmtSize(b.size):'',b.scan?'OCR':''].filter(Boolean).join(', ')}{b.author&&b.author!=='Tidak diketahui'?' · '+b.author:''}</small>
+     <small className="muted">{[b.format,b.size?fmtSize(b.size):'',b.scan&&!b.tl?'OCR':''].filter(Boolean).join(', ')}{b.author&&b.author!=='Tidak diketahui'?' · '+b.author:''}</small>
      <div className="bar"><i style={{width:pc+'%'}}/></div>
      <div className="acts"><small className="muted">{b.toc.length} bab{pg[b.id]!==undefined?` · ${pc}%`:''}</small><button className="btn sm" onClick={()=>{if(confirm('Hapus buku dan terjemahannya dari perangkat?'))void deleteBook(b.id).then(async()=>setBooks(await listBooks()))}}>Hapus</button></div></div></div>})}
   <div className="bk"><b>Cadangan data</b>
@@ -251,7 +253,7 @@ const lastUri=useRef('')
    <label className="btn sm">Impor cadangan<input type="file" accept=".json,application/json" hidden onChange={e=>{void doImport(e.target.files?.[0]);e.target.value=''}}/></label></div>
    <small className="muted">Ringan: terjemahan, posisi baca, penanda, pengaturan. Setelah dipulihkan, impor ulang berkas EPUB yang sama agar buku muncul. Penuh: termasuk teks buku. Kunci API tidak pernah ikut diekspor. {stor}</small></div>
   <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p>
-  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah), suara dibaca per kalimat dengan penanda</p></div>)
+  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah), suara per kalimat, PDF halaman-per-halaman & gulir</p></div>)
  const total=cur.toc.length
  const fixedL=!!cur.scan&&!!cur.ranges
  const cppE=cpp>0?cpp:(dim.w?Math.max(300,Math.floor((dim.w-2*PX)/(s.size*0.5)*((dim.h-2*PY)/(s.size*s.lh))*0.85)):1800)
@@ -273,7 +275,7 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.
    {mode!=='asli'&&t&&<Tag lang="id" className={mode==='dua'?'tr':''}>{H(t,'id',k.kind)}</Tag>}
    {mode==='asli'&&rev[k.id]&&t&&<Tag lang="id" className="tr">{H(t,'id',k.kind)}</Tag>}{busyB===k.id&&<small className="muted">Menerjemahkan…</small>}</div>}):null
  return(<div className="rd" onTouchStart={onTS} onTouchEnd={onTE}>
-  {scanImg&&cur?<ScanView bookId={cur.id} page={sp} pages={cur.pages??1} crop={s.crop} onZoom={z=>setZoom(z)} api={scanApi}/>:s.view==='page'?<div className="pgwrap" ref={wrap}>
+  {scanImg&&cur?(s.view==='scroll'?<ScanScroll bookId={cur.id} page={sp} pages={cur.pages??1} onPage={n=>{setSp(n);clearTimeout(spT.current);spT.current=window.setTimeout(()=>void kvSet('pos:'+cur.id,{ci:chOfPage(n),sp:n}),400)}} onZoom={z=>setZoom(z)} api={scanApi}/>:<ScanView bookId={cur.id} page={sp} pages={cur.pages??1} crop={s.crop} onZoom={z=>setZoom(z)} api={scanApi}/>):s.view==='page'?<div className="pgwrap" ref={wrap}>
     <article ref={art} className={'pg'+(s.just?' just':'')} style={{...fs,'--ph':Math.max(0,dim.h-2*PY)+'px',left:PX,top:PY,width:Math.max(0,dim.w-2*PX),height:Math.max(0,dim.h-2*PY),columnWidth:Math.max(0,dim.w-2*PX),columnGap:2*PX,transform:`translateX(${-page*dim.w}px)`} as React.CSSProperties}>{blocksEl??<p className="muted">Memuat bab…</p>}</article>
     {lay&&<div className="pline"><i style={{width:(bpos/Math.max(1,lay.total)*100)+'%'}}/></div>}
     <div className="pnum"><span className="pnumb" onClick={pbShow}>{lay?`Hal. ${bpos.toLocaleString('id-ID')} / ${fixedL?'':'~'}${lay.total.toLocaleString('id-ID')} · Bab ${ci+1}/${total}`:`${page+1}/${pages} · Bab ${ci+1} dari ${total}`}{note?' · '+note:''}{ocrP?` · OCR ${ocrP[0]}/${ocrP[1]} hlm`:''}</span></div></div>
@@ -286,8 +288,8 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.
   {panel==='toc'&&<div className="panel">{cur.toc.map((t,i)=><button key={i} className={'row'+(i===ci?' on':'')} onClick={()=>go(i)}><span className="num">{i+1}.</span> {t}</button>)}</div>}
   {panel==='tampil'&&<div className="panel">
    <div className="chips">{THEMES.map(([k,l])=><button key={k} className={'btn sm'+(s.theme===k?' on':'')} onClick={()=>upd('theme',k)}>{l}</button>)}</div>
-   {cur.scan&&cur.ranges&&<label><span>Potong margin otomatis (PDF pindaian)</span><input type="checkbox" checked={s.crop} onChange={e=>upd('crop',e.target.checked)}/></label>}
-    {cur.scan&&cur.ranges&&<label><span>PDF pindaian: tampilkan teks hasil OCR (lambat)</span><input type="checkbox" checked={s.scanText} onChange={e=>{const on=e.target.checked;upd('scanText',on);if(on)setCi(chOfPage(sp));else setSp(cur.ranges?.[ci]?.[0]??0)}}/></label>}
+   {cur.scan&&cur.ranges&&<label><span>Potong margin otomatis (halaman PDF)</span><input type="checkbox" checked={s.crop} onChange={e=>upd('crop',e.target.checked)}/></label>}
+    {cur.scan&&cur.ranges&&<label><span>{cur.tl?'PDF: tampilkan sebagai teks (bisa diterjemahkan & dibacakan)':'PDF pindaian: tampilkan teks hasil OCR (lambat)'}</span><input type="checkbox" checked={s.scanText} onChange={e=>{const on=e.target.checked;upd('scanText',on);if(on)setCi(chOfPage(sp));else setSp(cur.ranges?.[ci]?.[0]??0)}}/></label>}
     <label><span>Teks rata kiri-kanan (justify)</span><input type="checkbox" checked={s.just} onChange={e=>upd('just',e.target.checked)}/></label>
     <label><span>Tombol putar kecil di layar</span><input type="checkbox" checked={s.mini} onChange={e=>upd('mini',e.target.checked)}/></label>
     <label>Mode baca <select value={s.view} onChange={e=>upd('view',e.target.value)}><option value="page">Halaman (geser)</option><option value="scroll">Gulir</option></select></label>
@@ -306,7 +308,7 @@ const fs={fontSize:s.size,lineHeight:s.lh,fontFamily:famOf(s.font),fontWeight:s.
   {panel==='api'&&<div className="panel"><ApiPanel cfg={cfg} onSave={c=>{setCfg(c);void kvSet('cfg',c);void buildProvider(c).then(setProv);setPanel('')}}/>
    <label><span>Terjemahkan otomatis bab yang dibuka</span><input type="checkbox" checked={s.auto} onChange={e=>{const on=e.target.checked;if(on&&prov.id!=='mock'&&prov.id!=='mlkit'&&!confirm('Terjemah otomatis memakai kuota/biaya penyedia setiap kali bab dibuka. Aktifkan?'))return;upd('auto',on);if(on)setMode(m=>m==='asli'?'dua':m)}}/></label>
    <div className="bk"><b>Terjemahkan seluruh buku</b><button className="btn sm" onClick={()=>void doBook()}>{bprog?`Batal (bab ${bprog[0]+1}/${bprog[1]}, paragraf ${bprog[2]}/${bprog[3]})`:'Hitung dan mulai'}</button><small className="muted">Bisa dihentikan lalu dilanjutkan; paragraf yang sudah diterjemahkan tidak diulang.</small></div>
-   {cur.scan&&<div className="bk"><b>OCR seluruh buku</b><button className="btn sm" onClick={()=>void ocrBook()}>{ocrAll?`Berhenti (bab ${ocrAll[0]}/${ocrAll[1]})`:'Mulai OCR'}</button><small className="muted">Bab yang dibuka otomatis di-OCR; ini untuk memproses semuanya sekaligus.</small></div>}</div>}
+   {cur.scan&&!cur.tl&&<div className="bk"><b>OCR seluruh buku</b><button className="btn sm" onClick={()=>void ocrBook()}>{ocrAll?`Berhenti (bab ${ocrAll[0]}/${ocrAll[1]})`:'Mulai OCR'}</button><small className="muted">Bab yang dibuka otomatis di-OCR; ini untuk memproses semuanya sekaligus.</small></div>}</div>}
   </div>}
   {ui&&scanImg&&<footer className="ovb scanbar"><ProgressBar value={sp+1} total={cur.pages??1} onCommit={v=>gotoPage(v-1)}/><button className="btn sm" disabled={sp<=0} onClick={()=>gotoPage(sp-1)}>‹ Sebelumnya</button>
    <label className="pgjump">Hal. <input type="number" min="1" max={cur.pages??1} value={sp+1} onChange={e=>gotoPage((+e.target.value||1)-1)}/> / {cur.pages}</label>
