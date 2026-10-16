@@ -91,3 +91,5 @@ input:not([type]),input[type=text],input[type=number],input[type=password]{backg
 /* PDF mode gulir (semua halaman dari sampul sampai akhir) */
 .sscroll{position:absolute;inset:0;overflow-y:auto;background:var(--bg);overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .sslot{background:rgba(128,128,128,.14);overflow:hidden}
+.sscroll.pinch{overflow:hidden!important;touch-action:none}
+.sscroll>div{transform-origin:0 0}

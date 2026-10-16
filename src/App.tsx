@@ -253,7 +253,7 @@ const lastUri=useRef('')
    <label className="btn sm">Impor cadangan<input type="file" accept=".json,application/json" hidden onChange={e=>{void doImport(e.target.files?.[0]);e.target.value=''}}/></label></div>
    <small className="muted">Ringan: terjemahan, posisi baca, penanda, pengaturan. Setelah dipulihkan, impor ulang berkas EPUB yang sama agar buku muncul. Penuh: termasuk teks buku. Kunci API tidak pernah ikut diekspor. {stor}</small></div>
   <p className="muted small">Buku dan terjemahan disimpan hanya di perangkat ini. Hapus data situs atau copot aplikasi akan menghapusnya.</p>
-  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah), suara per kalimat, PDF halaman-per-halaman & gulir</p></div>)
+  <p className="muted small">Versi: {__BUILD__} · fitur: menu dua jari, halaman geser, bar progres (dua jari di bawah), suara per kalimat, PDF halaman-per-halaman, gulir & zoom cubit</p></div>)
  const total=cur.toc.length
  const fixedL=!!cur.scan&&!!cur.ranges
  const cppE=cpp>0?cpp:(dim.w?Math.max(300,Math.floor((dim.w-2*PX)/(s.size*0.5)*((dim.h-2*PY)/(s.size*s.lh))*0.85)):1800)
